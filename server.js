@@ -7,12 +7,28 @@ const morgan = require("morgan");
 const app = express();
 
 app.use(express.json());
-app.use(cors(
-  {
-    origin: "https://pal-one.vercel.app",
+var allowedOrigins = [
+  "http://localhost:3000",
+  "https://pal-one.vercel.app",
+  "pal-git-main-christo-kruger.vercel.app",
+  "pal-n3o2wifbx-christo-kruger.vercel.app",
+  "pal-2j0q0q0x0-christo-kruger.vercel.app",];
 
-  }
-  ));
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.indexOf(origin) === -1) {
+        var msg =
+          "The CORS policy for this site does not " +
+          "allow access from the specified Origin.";
+        return callback(new Error(msg), false);
+      }
+      return callback(null, true);
+    },
+  })
+);
+
 app.use(morgan("combined"));
 
 mongoose
