@@ -10,9 +10,11 @@ app.use(express.json());
 var allowedOrigins = [
   "http://localhost:3000",
   "https://pal-one.vercel.app",
-  "pal-git-main-christo-kruger.vercel.app",
-  "pal-n3o2wifbx-christo-kruger.vercel.app",
-  "pal-2j0q0q0x0-christo-kruger.vercel.app",];
+  "https://pal-git-main-christo-kruger.vercel.app",
+  "https://pal-n3o2wifbx-christo-kruger.vercel.app",
+  "https://pal-2j0q0q0x0-christo-kruger.vercel.app",
+];
+
 
 app.use(
   cors({
