@@ -8,12 +8,13 @@ const requireAdmin = require("../middleware/requireAdmin");
 // Get all presentations
 router.get("/", async (req, res) => {
   try {
-    const presentations = await Presentation.find();
+    const presentations = await Presentation.find().lean();
     res.json(presentations);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
+
 
 // Get presentations by attendee
 router.get("/user/:userId", async (req, res) => {
@@ -88,12 +89,17 @@ router.patch("/:id/attendees", getPresentation, auth, async (req, res) => {
         (attendee) => attendee._id.toString() === userId.toString()
       )
     ) {
-      res.presentation.attendees.push({
-        _id: userId,
-        name: userName,
-        phone: userPhone,
-        campus: userCampus,
-      });
+      try {
+        await res.presentation.addAttendee({
+          _id: userId,
+          name: userName,
+          phone: userPhone,
+          campus: userCampus,
+        });
+      } catch (err) {
+        console.log(err.message);
+        return res.status(400).json({ message: err.message });
+      }
     } else {
       console.log("User has already booked this presentation");
       return res
@@ -103,31 +109,29 @@ router.patch("/:id/attendees", getPresentation, auth, async (req, res) => {
   }
 
   try {
-    const updatedPresentation = await res.presentation.save();
-    console.log("Updated presentation:", updatedPresentation);
-
     // Send SMS to attendee
     const message = `Hello ${userName},
 
     You have successfully booked the presentation:
-    '${updatedPresentation.name}'.
+    '${res.presentation.name}'.
     
     Details:
-    - Description: ${updatedPresentation.description}
-    - Location: ${updatedPresentation.location}
-    - Date: ${new Date(updatedPresentation.date).toLocaleDateString()}
-    - Time: ${updatedPresentation.time}
+    - Description: ${res.presentation.description}
+    - Location: ${res.presentation.location}
+    - Date: ${new Date(res.presentation.date).toLocaleDateString()}
+    - Time: ${res.presentation.time}
     
     Looking forward to seeing you there!`;
 
     await smsService.sendSMS(userPhone, message);
 
-    res.json(updatedPresentation);
+    res.json(res.presentation);
   } catch (err) {
     console.error("Error saving the presentation:", err.message);
     res.status(400).json({ message: err.message });
   }
 });
+
 
 // Remove attendee
 
@@ -154,12 +158,15 @@ router.delete("/:id/attendees/:attendeeId", getPresentation, auth, requireAdmin,
 
 // Create presentation
 router.post("/", auth, async (req, res) => {
+  const maxAttendees = req.body.maxAttendees || 330;  // Get maxAttendees from the request body, or default to 330
   const presentation = new Presentation({
     name: req.body.name,
     description: req.body.description,
     location: req.body.location,
     date: req.body.date,
     time: req.body.time,
+    maxAttendees: maxAttendees,
+    availableSlots: maxAttendees,  // Initialize availableSlots to the same value as maxAttendees
     attendees: [],
   });
   try {
@@ -169,6 +176,7 @@ router.post("/", auth, async (req, res) => {
     res.status(400).json({ message: err.message });
   }
 });
+
 
 // Update presentation
 router.put("/:id", getPresentation, async (req, res) => {
@@ -227,6 +235,7 @@ router.post("/:id/attendees", getPresentation, auth, async (req, res) => {
     res.status(400).json({ message: err.message });
   }
 });
+
 
 // Replace attendees list
 router.put("/:id/attendees", getPresentation, async (req, res) => {
