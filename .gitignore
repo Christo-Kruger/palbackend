@@ -1,0 +1,13 @@
+# .gitignore
+
+# Ignore node_modules
+node_modules/
+
+# Ignore .env file
+.env
+
+# Ignore logs
+*.log
+
+# Ignore the npm debug log
+npm-debug.log*
