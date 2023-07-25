@@ -39,6 +39,7 @@ router.post("/", auth, async (req, res) => {
         previousSchool: req.body.child.previousSchool,
         age: req.body.child.age,
         gender: req.body.child.gender,
+        dateOfBirth: req.body.child.dateOfBirth,
       },
       parent: {
         _id: parent._id,
@@ -53,7 +54,14 @@ router.post("/", auth, async (req, res) => {
     await booking.save();
 
     // Send SMS
-    const message = `You have successfully booked a test for ${req.body.child.name} at ${req.body.campus} campus on ${bookingDate} at ${req.body.time}.`;
+    const message = 
+    `You have successfully booked a test for:
+    *${req.body.child.name} 
+    *${req.body.campus} campus 
+    *${bookingDate}
+    *${req.body.time}.
+    
+    Please arrive 10 minutes before the scheduled time.`;
     try {
       await smsService.sendSMS(parent.phone, message);
     } catch (smsError) {

@@ -110,7 +110,8 @@ router.patch("/:id/attendees", getPresentation, auth, async (req, res) => {
 
   try {
     // Send SMS to attendee
-    const message = `Hello ${userName},
+    const message = 
+    `Hello ${userName},
 
     You have successfully booked the presentation:
     '${res.presentation.name}'.

@@ -4,6 +4,7 @@ const BookingSchema = new mongoose.Schema({
   child: {
     name: { type: String, required: true },
     previousSchool: { type: String, required: true },
+    dateOfBirth: { type: Date, required: true },
     age: {
       type: String,
       required: true,
