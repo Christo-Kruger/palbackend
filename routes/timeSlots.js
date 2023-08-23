@@ -15,18 +15,27 @@ router.post('/', auth,  async (req, res) => {
   }
 });
 
-// GET route to retrieve all test slots
 router.get('/', async (req, res) => {
   try {
-    const testSlots = await TestSlot.find({
+    let testSlots = await TestSlot.find({
       date: { $gte: new Date() }, // Only return future test slots
-      $expr: { $lt: [ { $size: "$bookings" }, "$capacity" ] } // Only return test slots that are not fully booked
+      // the $expr line is not needed for this version since you'll compute available slots on the frontend
     });
+
+    // Assuming bookings is an array on each test slot document, calculate available slots for each test slot
+    testSlots = testSlots.map(slot => {
+      slot = slot.toObject(); // Convert the document to a plain JS object
+      slot.availableSlots = slot.capacity - slot.bookings.length;
+      return slot;
+    });
+
     res.send(testSlots);
   } catch (error) {
+    console.error("Error fetching test slots:", error);
     res.status(500).send();
   }
 });
+
 
 router.get('/admin', async (req, res) => {
   try {

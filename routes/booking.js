@@ -92,7 +92,8 @@ router.post("/", auth, async (req, res) => {
       // You can decide what to do when SMS sending fails
     }
 
-    res.send(booking);
+    res.status(201).send(booking);
+
   } catch (error) {
     console.log("Booking error:", error);
     res.status(500).send("Error processing the booking.");
@@ -192,7 +193,6 @@ router.get("/count", async (req, res) => {
   }
 });
 
-// Get all bookings if user is admin
 router.get("/admin", auth, async (req, res) => {
   try {
     const userRole = req.user.role;
@@ -200,41 +200,50 @@ router.get("/admin", auth, async (req, res) => {
     if (userRole !== "admin") {
       return res
         .status(403)
-        .send("You are not authorized to view all bookings.");
+        .send("You are not authorized to view all test slots.");
     }
 
-    const { campus, childName, page = 1, limit = 10 } = req.query;
+    const { campus, page = 1, limit = 10 } = req.query;
     const query = {};
 
     if (campus) {
       query.campus = campus;
     }
 
-    if (childName) {
-      query["child.name"] = childName;
-    }
-
-    const bookings = await Booking.find(query)
-      .limit(limit * 1) // convert to number and set the limit of items per page
-      .skip((page - 1) * limit) // convert to number and skip the items before the current page
+    // Fetch test slots with populated bookings count
+    const testSlots = await TestSlot.find(query)
+    
+      .populate({
+        path: 'bookings',
+        select: '_id'  // Only fetch the _id, since we're only interested in the count
+      })
+      .limit(limit * 1)
+      .skip((page - 1) * limit)
+      .lean()  // Convert the mongoose document to a plain JS object
       .exec();
 
-    // get total documents in the Booking collection
-    const count = await Booking.countDocuments();
+    // Replace bookings array with its length for each slot
+    testSlots.forEach(slot => {
+      slot.bookings = slot.bookings.length;
+    });
 
-    if (!bookings) {
-      return res.status(404).send("Bookings not found.");
+    // get total documents in the TestSlot collection
+    const count = await TestSlot.countDocuments();
+
+    if (!testSlots.length) {
+      return res.status(404).send("Test slots not found.");
     }
 
-    // return response with bookings, total pages, and current page
+    // Return response with test slots, total pages, and current page
     res.json({
-      bookings,
+      testSlots,
       totalPages: Math.ceil(count / limit),
       currentPage: page,
     });
+
   } catch (error) {
-    console.log("Error fetching bookings:", error);
-    res.status(500).send("Error fetching the bookings.");
+    console.log("Error fetching test slots:", error);
+    res.status(500).send("Error fetching the test slots.");
   }
 });
 
@@ -312,7 +321,7 @@ router.delete("/:id", auth, async (req, res) => {
 });
 
 //Delete if Admin
-router.delete("/admin/delete/:id", auth, requireAdmin, async (req, res) => {
+router.delete("/admin/delete/:id", auth, async (req, res) => {
   try {
     const bookingId = req.params.id;
     const booking = await Booking.findById(bookingId);

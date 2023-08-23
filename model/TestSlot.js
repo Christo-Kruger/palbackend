@@ -12,6 +12,14 @@ const TestSlotSchema = new mongoose.Schema({
   },
   capacity: { type: Number, required: true },
   bookings: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Booking' }]
+}, {
+  toJSON: { virtuals: true },   // include virtuals when document is converted to JSON
+  toObject: { virtuals: true }  // include virtuals when document is converted to an object
+});
+
+// Virtual property to get the count of bookings
+TestSlotSchema.virtual('booked').get(function() {
+  return this.bookings.length;
 });
 
 // Convert start and end times to specific format when saving the document
