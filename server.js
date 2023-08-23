@@ -8,7 +8,7 @@ const app = express();
 
 app.use(express.json());
 var allowedOrigins = [
-  "http://localhost:3000",
+  "http://localhost:3001",
   "https://pal-one.vercel.app",
   "https://pal-git-main-christo-kruger.vercel.app",
   "https://pal-n3o2wifbx-christo-kruger.vercel.app",
@@ -63,5 +63,5 @@ app.use("/api/timeSlots", timeSlots);
 app.use("/api/bookingPriority", priorityBooking);
 
 
-const port = process.env.PORT || 9000;
+const port = process.env.PORT || 9001;
 app.listen(port, () => console.log(`Server started on port ${port}`));

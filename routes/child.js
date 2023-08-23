@@ -24,7 +24,7 @@ router.get('/', auth, async (req, res) => {
 router.post("/", auth, async (req, res) => {
     try {
       // Extract the data from the request body
-      const { name, previousSchool, dateOfBirth } = req.body;
+      const { name, previousSchool, dateOfBirth,gender } = req.body;
       const parent = req.user._id; // the id of the parent (User)
   
       // Create a new child instance
