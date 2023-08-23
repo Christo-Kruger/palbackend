@@ -1,4 +1,4 @@
-// model/Campus.js
+
 const mongoose = require('mongoose');
 
 const CampusSchema = new mongoose.Schema({

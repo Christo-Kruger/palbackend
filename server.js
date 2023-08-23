@@ -30,6 +30,8 @@ app.use(
     },
   })
 );
+app.set('etag', false); // in your main server file where you define your app
+
 
 app.use(morgan("combined"));
 
@@ -48,13 +50,18 @@ const campusRoutes = require("./routes/campus");
 const childRoutes = require("./routes/child");
 const presentationRoute = require("./routes/presentation");
 const smsRoute = require("./routes/sms");
+const timeSlots= require("./routes/timeSlots");
+const priorityBooking =require ("./routes/bookingPriority")
 
 app.use("/api/users", userRoutes);
 app.use("/api/bookings", bookingRoutes);
 app.use("/api/campuses", campusRoutes);
-app.use("/api/children", childRoutes);
+app.use("/api/child", childRoutes);
 app.use("/api/presentations", presentationRoute);
 app.use("/api/sms", smsRoute);
+app.use("/api/timeSlots", timeSlots);
+app.use("/api/bookingPriority", priorityBooking);
+
 
 const port = process.env.PORT || 9000;
 app.listen(port, () => console.log(`Server started on port ${port}`));

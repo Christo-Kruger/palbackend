@@ -1,6 +1,7 @@
 const axios = require('axios');
 const crypto = require('crypto');
 
+
 const sendSMS = async (phoneNumber, message) => {
   const url = `https://sens.apigw.ntruss.com/sms/v2/services/${process.env.SERVICE_ID}/messages`;
   const timestamp = Date.now().toString(); // Get current Unix timestamp
@@ -38,7 +39,6 @@ const sendSMS = async (phoneNumber, message) => {
 
   try {
     const response = await axios.post(url, data, { headers });
-    console.log('Signature:', signature);
     console.log('Response from Naver Cloud SMS:', response.data);
     return response.data;
   } catch (error) {

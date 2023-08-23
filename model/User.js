@@ -6,8 +6,12 @@ const UserSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true },
   password: { type: String, required: true },
   phone: { type: String },
-  role: { type: String, enum: ["parent", "admin"], default: "parent" },
+  role: { type: String, enum: ["parent", "admin", "superadmin"], default: "parent" },
   campus: { type: String, enum: ['Suji', 'Dongtan', 'Bundang'], required: true },
+  children: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Child' }],
+  attendedPresentation: { type: Boolean, default: false },
+  resetToken: { type: String },
+  resetTokenExpires: { type: Date },
 
 });
 

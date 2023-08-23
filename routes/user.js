@@ -2,25 +2,25 @@ const express = require("express");
 const router = express.Router();
 const User = require("../model/User");
 const jwt = require("jsonwebtoken");
-const auth = require("../middleware/auth");
-const requireAdmin = require("../middleware/requireAdmin");
-const Booking = require("../model/Booking");
-const Child = require("../model/Child");
+const { sendSMS } = require("../services/smsService");
+const crypto = require("crypto");
+const bcrypt = require("bcryptjs");
 
 router.post("/register", async (req, res) => {
   try {
     const user = new User(req.body);
     await user.save();
     const token = jwt.sign(
-      { _id: user._id, 
-        role: user.role, 
-        name: user.name, 
-        phone: user.phone,  // add this line
-        campus: user.campus // add this line
+      {
+        _id: user._id,
+        role: user.role,
+        name: user.name,
+        phone: user.phone, // add this line
+        campus: user.campus, // add this line
       },
       process.env.JWT_SECRET
     );
-    res.json({ token, role: user.role, name: user.name });
+    res.json({ token, role: user.role, name: user.name, _id: user._id });
   } catch (err) {
     console.log(err);
     if (err.code === 11000) {
@@ -34,86 +34,134 @@ router.post("/register", async (req, res) => {
 });
 
 router.post("/login", async (req, res) => {
-  console.log(req.body.email, req.body.password); // Log email and password for verification
-
   const user = await User.findOne({ email: req.body.email });
   console.log(user); // Log the user returned from the query
+
   if (!user || !(await user.isValidPassword(req.body.password))) {
     console.log("The user is invalid or the password is incorrect");
     return res.status(400).send("Invalid email or password.");
   }
 
   const token = jwt.sign(
-    { 
-      _id: user._id, 
-      role: user.role, 
-      name: user.name, 
-      phone: user.phone,  // add this line
-      campus: user.campus // add this line
+    {
+      _id: user._id,
+      role: user.role,
+      name: user.name,
+      phone: user.phone,
+      campus: user.campus,
+      attendedPresentation: user.attendedPresentation, // Optionally add this to the JWT payload if needed
+      children: user.children,
     },
     process.env.JWT_SECRET
   );
-  console.log(`The user ${user.email} has logged in.`);
 
-  // Include the role, name, phone and campus in the response
-  res.send({ token, role: user.role, name: user.name, phone: user.phone, campus: user.campus });
+  // Include the role, name, phone, campus, and attendedPresentation in the response
+  res.send({
+    token,
+    role: user.role,
+    name: user.name,
+    phone: user.phone,
+    campus: user.campus,
+    attendedPresentation: user.attendedPresentation, // Include this in the response
+    children: user.children,
+  });
 });
 
-router.put("/tests/:id", auth, requireAdmin, async (req, res) => {
-  const test = await Test.findOne({ booking: req.params.id });
+router.get("/parentsForAdmin", async (req, res) => {
+  // Assuming the admin is authenticated and their ID is available in req.user._id (from JWT decoding)
 
-  if (!test) {
-    console.log('Test not found.');
-    return res.status(404).send("Test not found.");
+  // Fetch the admin from the database
+  const admin = await User.findById(req.user._id);
+
+  // Check if the user is an admin
+  if (admin.role !== "admin") {
+    return res.status(403).json({ message: "Not authorized" });
   }
 
-  test.passed = req.body.passed;
-  test.score = req.body.score;
-  await test.save();
+  // Fetch parents based on the admin's campus
+  const parents = await User.find({ campus: admin.campus, role: "parent" });
 
-  console.log('Test saved!');
-  res.send(test);
+  return res.json(parents);
 });
 
-router.post("/booking", auth, async (req, res) => {
+router.post("/password-reset-request", async (req, res) => {
   try {
-    console.log("Entering booking route");
-    const child = new Child(req.body.child);
-    await child.save();
+    const user = await User.findOne({ phone: req.body.phone });
+    if (!user) {
+      return res
+        .status(400)
+        .json({ error: "This phone number is not registered." });
+    }
 
-    console.log("Child saved");
-    const booking = new Booking({
-      parent: req.user._id,
-      child: child._id,
-      date: req.body.date,
-      campus: req.body.campus,
-    });
-    await booking.save();
+    const buffer = crypto.randomBytes(20);
+    const token = buffer.toString("hex");
 
-    console.log("Booking saved");
-    const user = await User.findById(req.user._id);
-    user.children.push(child);
+    // you'll need to add resetToken and resetTokenExpires to your User model
+    user.resetToken = token;
+    user.resetTokenExpires = Date.now() + 3600000; // token is valid for 1 hour
+
     await user.save();
 
-    console.log("User saved");
-    res.send(booking);
-  } catch (err) {
-    console.log("Error: ", err);
-    res.status(500).send(err);
+    // send the SMS here
+    const message = `Your password reset code is ${token}. This code will expire in 1 hour.`;
+    await sendSMS(user.phone, message);
+
+    res.send("Password reset SMS sent.");
+  } catch (error) {
+    res
+      .status(500)
+      .json({ error: "An error occurred while processing your request." });
   }
 });
 
-router.get("/bookings", auth, async (req, res) => {
+router.patch("/:userId/attendedPresentation", async (req, res) => {
+  const userId = req.params.userId;
+  const { attended } = req.body;
+
   try {
-    console.log("Before finding bookings");
-    const bookings = await Booking.find({ parent: req.user._id }).populate(
-      "child"
-    );
-    console.log("After finding bookings");
-    res.send(bookings);
-  } catch (err) {
-    console.log(err);
-    res.status(500).send(err);
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ error: "User not found." });
+    }
+
+    user.attendedPresentation = attended;
+    await user.save();
+
+    res.status(200).json({ message: "Attendance updated successfully." });
+  } catch (error) {
+    res
+      .status(500)
+      .json({ error: "An error occurred while updating attendance." });
+  }
+});
+
+router.post("/password-reset", async (req, res) => {
+  try {
+    const { resetToken, newPassword } = req.body;
+
+    const user = await User.findOne({
+      resetToken,
+      resetTokenExpires: { $gt: Date.now() },
+    });
+
+    if (!user) {
+      return res.status(400).json({ error: "Invalid or expired reset token." });
+    }
+
+    // Hash the new password before saving
+    const salt = await bcrypt.genSalt(10);
+    user.password = await bcrypt.hash(newPassword, salt);
+
+    user.resetToken = undefined;
+    user.resetTokenExpires = undefined;
+
+    await user.save();
+
+    res.send("Password has been successfully reset.");
+  } catch (error) {
+    res
+      .status(500)
+      .json({ error: "An error occurred while processing your request." });
   }
 });
 

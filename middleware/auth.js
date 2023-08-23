@@ -1,24 +1,26 @@
 const jwt = require("jsonwebtoken");
 
 module.exports = function (req, res, next) {
-  const token = req.header("x-auth-token");
-  if (!token) return res.status(401).send("Access denied. No token provided.");
+  const bearerHeader = req.header("authorization");
+  if (!bearerHeader)
+    return res.status(401).send("Access denied. No token provided.");
 
+  const token = bearerHeader.split(" ")[1]; // Get the token part after "Bearer"
+  console.log("Extracted token:", token);
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = decoded; 
+    req.user = decoded;
+
     next();
+    // ... the try block
   } catch (exception) {
+    console.error(exception); // Log the error for more details
     if (exception instanceof jwt.TokenExpiredError) {
-      // Token is expired
-      // You could potentially check for a valid refresh token here and return a new JWT if valid.
       res.status(401).send("Token expired.");
     } else if (exception instanceof jwt.JsonWebTokenError) {
-      // Token is invalid
-      res.status(400).send("Invalid token.");
+      res.status(400).send("Invalid token. " + exception.message);
     } else {
-      // Something else went wrong
-      res.status(400).send("Something went wrong.");
+      res.status(400).send("Something went wrong. " + exception.message);
     }
   }
 };
