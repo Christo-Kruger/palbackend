@@ -1,5 +1,7 @@
 const mongoose = require("mongoose");
 const Child = require("./Child");
+const TestSlot = require('./TestSlot');
+
 
 const BookingSchema = new mongoose.Schema({
   child: { type: mongoose.Schema.Types.ObjectId, ref: "Child", required: true },
@@ -8,6 +10,18 @@ const BookingSchema = new mongoose.Schema({
   price: Number,
   paid: { type: Boolean, default: false },
 });
+
+BookingSchema.post("findOneAndDelete", async function (doc) {
+  try {
+    await TestSlot.updateOne(
+      { _id: doc.testSlot },
+      { $pull: { bookings: doc._id } }
+    );
+  } catch (error) {
+    console.error("Error updating TestSlot after deleting booking:", error);
+  }
+});
+
 
 
 

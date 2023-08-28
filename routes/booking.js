@@ -8,6 +8,11 @@ const smsService = require("../services/smsService");
 const requireAdmin = require("../middleware/requireAdmin");
 const Child = require("../model/Child");
 const BookingPriority = require("../model/BookingPriority");
+const mongoose = require("mongoose");
+
+
+
+
 
 router.post("/", auth, async (req, res) => {
   const { testSlotId, childId } = req.body;
@@ -28,11 +33,7 @@ router.post("/", auth, async (req, res) => {
     console.log("Priority End:", priority.priorityEnd);
     console.log("Current Time:", currentTime);
 
-    if (
-      currentTime >= priority.priorityStart &&
-      currentTime <= priority.priorityEnd
-    ) {
-      console.log("attendedPresentation:", parent.attendedPresentation);
+    if (currentTime < priority.priorityStart || (currentTime >= priority.priorityStart && currentTime <= priority.priorityEnd)) {
       if (!parent.attendedPresentation) {
         return res
           .status(403)
@@ -119,6 +120,18 @@ router.patch("/payment/:id",  async (req, res) => {
   }
 });
 
+router.get('/child/:childId', async (req, res) => {
+  try {
+    const bookings = await Booking.find({ childId: req.params.childId });
+    if (bookings.length > 0) {
+      res.json(bookings);
+    } else {
+      res.status(404).json({ message: 'No bookings found for this child.' });
+    }
+  } catch (error) {
+    res.status(500).json({ message: 'Server error.' });
+  }
+});
 router.get("/", async (req, res) => {
   try {
     const bookings = await Booking.find()
@@ -296,10 +309,14 @@ router.patch("/:id", auth, async (req, res) => {
   }
 });
 
+
+
+// ...
+
 router.delete("/:id", auth, async (req, res) => {
   try {
     const bookingId = req.params.id;
-    const booking = await Booking.findById(bookingId);
+    const booking = await Booking.findOneAndDelete({ _id: bookingId });
 
     if (!booking) {
       return res.status(404).send("Booking not found.");
@@ -311,8 +328,6 @@ router.delete("/:id", auth, async (req, res) => {
         .send("You are not authorized to delete this booking.");
     }
 
-    await booking.deleteOne(); // Use deleteOne() method instead of delete()
-
     res.send(booking);
   } catch (error) {
     console.log("Error deleting booking:", error);
@@ -320,23 +335,24 @@ router.delete("/:id", auth, async (req, res) => {
   }
 });
 
-//Delete if Admin
+
 router.delete("/admin/delete/:id", auth, async (req, res) => {
   try {
     const bookingId = req.params.id;
-    const booking = await Booking.findById(bookingId);
+    const booking = await Booking.findOneAndDelete({ _id: bookingId });
 
     if (!booking) {
       return res.status(404).send("Booking not found.");
     }
 
-    await booking.deleteOne();
-
     res.send(booking);
   } catch (error) {
     console.log("Error deleting booking:", error);
     res.status(500).send("Error deleting the booking.");
   }
 });
+
+
+
 
 module.exports = router;

@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const bcrypt = require("bcrypt");
+const Child = require("./Child")
 
 const UserSchema = new mongoose.Schema({
   name: { type: String, required: true },
@@ -12,6 +13,7 @@ const UserSchema = new mongoose.Schema({
   attendedPresentation: { type: Boolean, default: false },
   resetToken: { type: String },
   resetTokenExpires: { type: Date },
+  qrCodeDataURL: { type: Buffer }
 
 });
 

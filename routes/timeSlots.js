@@ -40,8 +40,7 @@ router.get('/', async (req, res) => {
 router.get('/admin', async (req, res) => {
   try {
     const testSlots = await TestSlot.find({
-      
-      $expr: { $lt: [ { $size: "$bookings" }, "$capacity" ] } // Only return test slots that are not fully booked
+
     });
     res.send(testSlots);
   } catch (error) {

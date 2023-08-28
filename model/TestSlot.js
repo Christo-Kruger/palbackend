@@ -10,6 +10,22 @@ const TestSlotSchema = new mongoose.Schema({
     enum: ["Suji", "Dongtan", "Bundang"],
     required: true,
   },
+  testGrade: {
+    type: String,
+    enum: [
+      "5 Year Old",
+      "6 Year Old",
+      "7 Year Old",
+      "1st Grade",
+      "2nd Grade",
+      "3rd Grade",
+      "4th Grade",
+      "5th Grade",
+      "6th Grade",
+      "7th Grade",
+      "8th Grade",
+    ],
+  },
   capacity: { type: Number, required: true },
   bookings: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Booking' }]
 }, {

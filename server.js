@@ -8,7 +8,7 @@ const app = express();
 
 app.use(express.json());
 var allowedOrigins = [
-  "http://localhost:3001",
+  "http://localhost:3000",
   "https://pal-one.vercel.app",
   "https://pal-git-main-christo-kruger.vercel.app",
   "https://pal-n3o2wifbx-christo-kruger.vercel.app",
@@ -52,6 +52,7 @@ const presentationRoute = require("./routes/presentation");
 const smsRoute = require("./routes/sms");
 const timeSlots= require("./routes/timeSlots");
 const priorityBooking =require ("./routes/bookingPriority")
+const qr = require("./routes/qrscanner")
 
 app.use("/api/users", userRoutes);
 app.use("/api/bookings", bookingRoutes);
@@ -61,6 +62,7 @@ app.use("/api/presentations", presentationRoute);
 app.use("/api/sms", smsRoute);
 app.use("/api/timeSlots", timeSlots);
 app.use("/api/bookingPriority", priorityBooking);
+app.use("/api/qr", qr);
 
 
 const port = process.env.PORT || 9001;
