@@ -45,6 +45,18 @@ router.get("/", async (req, res) => {
   }
 });
 
+router.get('/myBookings', auth, async (req, res) => {
+    try {
+        const presentations = await Presentation.find({ 'timeSlots.attendees._id': req.user._id })
+            .populate('timeSlots.attendees._id');
+
+        res.json(presentations);
+    } catch (err) {
+        res.status(500).send('Server Error');
+    }
+});
+
+
 router.get("/exportToExcel", auth, async (req, res) => {
   try {
     console.log("Start of /exportToExcel");
