@@ -7,7 +7,7 @@ const User = require("../model/User");
 const exceljs = require("exceljs");
 const moment = require("moment");
 const QRCode = require("qrcode");
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
 
 const allowedOrigins = [
   "http://localhost:3000",
@@ -45,26 +45,31 @@ router.get("/", async (req, res) => {
   }
 });
 
-router.get('/myBookings', auth, async (req, res) => {
+router.get("/myBookings", auth, async (req, res) => {
   try {
-      const presentations = await Presentation.find({ 'timeSlots.attendees._id': req.user._id });
-
-      const myBookings = presentations.map(presentation => {
-          const myTimeSlot = presentation.timeSlots.find(timeSlot => 
-              timeSlot.attendees.some(attendee => attendee._id.toString() === req.user._id.toString())
-          );
-          return {
-              ...presentation.toObject(),
-              timeSlots: [myTimeSlot],
-          };
-      });
-
-      res.json(myBookings);
+    console.log("User ID:", req.user._id);
+    const presentations = await Presentation.find({
+      "timeSlots.attendees._id": req.user._id,
+    });
+    console.log("All Presentations:", presentations);
+    const myBookings = presentations.map((presentation) => {
+      const myTimeSlot = presentation.timeSlots.find((timeSlot) =>
+        timeSlot.attendees.some(
+          (attendee) => attendee._id.toString() === req.user._id.toString()
+        )
+      );
+      return {
+        ...presentation.toObject(),
+        timeSlots: [myTimeSlot],
+      };
+    });
+    console.log("My Bookings:", myBookings);
+    res.json(myBookings);
   } catch (err) {
-      res.status(500).send('Server Error');
+    console.error(err);
+    res.status(500).send("Server Error");
   }
 });
-
 
 router.get("/exportToExcel", auth, async (req, res) => {
   try {
@@ -327,6 +332,61 @@ router.get("/presentations", async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 });
+router.get('/:presentationId/timeSlots', async (req, res) => {
+  try {
+    const { presentationId } = req.params;
+    const presentation = await Presentation.findById(presentationId);
+    if (!presentation) {
+      return res.status(404).send({ error: 'Presentation not found' });
+    }
+    res.send(presentation.timeSlots);
+  } catch (error) {
+    console.error(error);
+    res.status(500).send({ error: 'Internal Server Error' });
+  }
+});
+
+router.patch('/:presentationId/changeSlot', async (req, res) => {
+  try {
+    const { presentationId } = req.params;
+    const { userId, oldSlotId, newSlotId } = req.body; // Replace userId with authentication
+
+    // Find the specific presentation
+    const presentation = await Presentation.findById(presentationId);
+    if (!presentation) {
+      return res.status(404).send({ error: 'Presentation not found' });
+    }
+
+    const oldSlot = presentation.timeSlots.id(oldSlotId);
+    if (!oldSlot) {
+      return res.status(400).send({ error: 'Old slot not found' });
+    }
+    oldSlot.attendees = oldSlot.attendees.filter((attendee) => attendee._id.toString() !== userId.toString());
+    oldSlot.availableSlots += 1;
+
+    presentation.markModified('timeSlots');
+
+    const newSlot = presentation.timeSlots.id(newSlotId);
+    if (!newSlot) {
+      return res.status(400).send({ error: 'New slot not found' });
+    }
+    if (newSlot.attendees.length >= newSlot.maxAttendees) {
+      return res.status(400).send({ error: 'The new slot is already fully booked' });
+    }
+    newSlot.attendees.push({ _id: userId });
+    newSlot.availableSlots -= 1;
+
+    presentation.markModified('timeSlots');
+
+    await presentation.save();
+
+    return res.send({ success: 'Successfully changed the slot' });
+
+  } catch (error) {
+    console.error('Error changing slot:', error);
+    return res.status(500).send({ error: 'Internal Server Error' });
+  }
+});
 
 // Get presentations by attendee
 router.get("/user/:userId", async (req, res) => {
@@ -402,27 +462,33 @@ router.delete(
   }
 );
 
-router.delete('/parent/:id/attendees/:userId', getPresentation, auth, async (req, res) => {
-  const {  userId } = req.params;
+router.delete(
+  "/parent/:id/attendees/:userId",
+  getPresentation,
+  auth,
+  async (req, res) => {
+    const { userId } = req.params;
 
-  try {
-    const presentation = await Presentation.findOne({ _id: req.params.id });
-    if (!presentation) {
-      return res.status(404).json({ message: 'Presentation not found' });
+    try {
+      const presentation = await Presentation.findOne({ _id: req.params.id });
+      if (!presentation) {
+        return res.status(404).json({ message: "Presentation not found" });
+      }
+
+      presentation.timeSlots.forEach((timeSlot) => {
+        timeSlot.attendees = timeSlot.attendees.filter(
+          (attendee) => attendee._id.toString() !== userId
+        );
+      });
+
+      const updatedPresentation = await presentation.save();
+
+      res.json(updatedPresentation);
+    } catch (err) {
+      res.status(500).json({ message: err.message });
     }
-
-    presentation.timeSlots.forEach(timeSlot => {
-      timeSlot.attendees = timeSlot.attendees.filter(attendee => attendee._id.toString() !== userId);
-    });
-
-    const updatedPresentation = await presentation.save();
-    
-    res.json(updatedPresentation);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
   }
-});
-
+);
 
 router.get("/presentationsWithAttendees", async (req, res) => {
   try {
@@ -508,31 +574,40 @@ router.patch("/:id/slots/:slotId/attendees", auth, async (req, res) => {
     const presentation = await Presentation.findById(req.params.id);
     const timeSlot = presentation.timeSlots.id(req.params.slotId);
     const userIdString = req.user._id.toString();
-    const user = await User.findById(req.user._id).populate('children');
+    const user = await User.findById(req.user._id).populate("children");
 
     // Check if the user has any children in the same age group
-    const isChildInAgeGroup = user.children.some(child => {
+    const childInAgeGroup = user.children.find((child) => {
       return child.ageGroup === presentation.ageGroup;
     });
-
-    if (!isChildInAgeGroup) {
+    
+    if (!childInAgeGroup) {
       return res.status(400).json({
         message: "You don't have any children in this age group.",
       });
     }
+    
+    const childName = childInAgeGroup.name;
+    const childTestGrade = childInAgeGroup.testGrade;
+    
 
     // Check if the user has already booked a presentation in the same age group
-    const allPresentations = await Presentation.find({ ageGroup: presentation.ageGroup });
-    
+    const allPresentations = await Presentation.find({
+      ageGroup: presentation.ageGroup,
+    });
+
     const isBookedInSameAgeGroup = allPresentations.some((presentation) =>
       presentation.timeSlots.some((timeSlot) =>
-        timeSlot.attendees.map((attendee) => attendee._id.toString()).includes(userIdString)
+        timeSlot.attendees
+          .map((attendee) => attendee._id.toString())
+          .includes(userIdString)
       )
     );
 
     if (isBookedInSameAgeGroup) {
       return res.status(400).json({
-        message: "You've already booked a presentation for this age group. You can't book again.",
+        message:
+          "You've already booked a presentation for this age group. You can't book again.",
       });
     }
 
@@ -583,7 +658,6 @@ router.patch("/:id/slots/:slotId/attendees", auth, async (req, res) => {
     await session.commitTransaction();
     session.endSession();
     res.json(timeSlot);
-
   } catch (err) {
     // Abort the transaction and end the session
     await session.abortTransaction();
@@ -591,8 +665,6 @@ router.patch("/:id/slots/:slotId/attendees", auth, async (req, res) => {
     res.status(400).json({ message: err.message });
   }
 });
-
-
 
 // Replace attendees list
 router.put("/:id/attendees", getPresentation, async (req, res) => {

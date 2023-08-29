@@ -35,17 +35,22 @@ router.get('/children', auth, async (req, res) => {
 
 router.patch('/:childId', async (req, res) => {
   try {
-      const child = await Child.findByIdAndUpdate(req.params.childId, req.body, { new: true });
-
-      if (child) {
-          res.json(child);
-      } else {
-          res.status(404).send({ message: 'Child not found' });
-      }
+    const child = await Child.findById(req.params.childId);
+    if (child) {
+      child.set(req.body);
+      child.updateChildFields();
+      await child.save();
+      res.json(child);
+    } else {
+      res.status(404).send({ message: 'Child not found' });
+    }
   } catch (error) {
-      res.status(500).send({ message: 'Error updating child details' });
+    console.error(error);
+    res.status(500).send({ message: 'Error updating child details', error: error.message });
   }
 });
+
+
 
 router.patch('/parent/:childId', async (req, res) => {
   try {
@@ -106,6 +111,18 @@ router.post("/", auth, async (req, res) => {
       console.log("Error creating child:", error);
       res.status(500).send("Error creating the child.");
     }
+});
+
+
+//Delete
+
+router.delete('/:childId', async (req, res) => {
+  try {
+      const child = await Child.findByIdAndDelete(req.params.childId);
+      return res.json('Deleted');
+  } catch (error) {
+      res.status(500).send({ message: 'Error deleting child' });
+  }
 });
 
   

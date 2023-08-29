@@ -123,12 +123,14 @@ router.get("/parents", async (req, res) => {
 
 router.get("/:id/children", async (req, res) => {
   try {
-    const children = await Child.find();
+    const userId = req.params.id;
+    const children = await Child.find({ parent: userId });
     res.json(children);
   } catch (err) {
     res.status(500).json({ error: "Failed to fetch children." });
   }
 });
+
 
 
 //Update

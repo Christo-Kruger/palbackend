@@ -1,18 +1,15 @@
 const mongoose = require("mongoose");
 
-
 const ChildSchema = new mongoose.Schema({
   name: { type: String, required: true },
   previousSchool: { type: String, required: true },
   dateOfBirth: { type: Date, required: true },
   ageGroup: { type: String },
-  gender:{ type: String, enum:[
-    "male",
-    "female"
-  ]},
+  gender: { type: String, enum: ["male", "female"] },
   testGrade: {
     type: String,
     enum: [
+      "Age not eligible for testing",
       "5 Year Old",
       "6 Year Old",
       "7 Year Old",
@@ -27,6 +24,7 @@ const ChildSchema = new mongoose.Schema({
     ],
   },
   parent: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+  updatedAt: { type: Date },
 });
 
 const ageGradeMapping = {
@@ -43,8 +41,6 @@ const ageGradeMapping = {
   13: "8th Grade",
 };
 
-
-
 const ageGroupMapping = {
   "5 Year Old": "Kids",
   "6 Year Old": "Kids",
@@ -59,14 +55,29 @@ const ageGroupMapping = {
   "8th Grade": "Elementary",
 };
 
-ChildSchema.pre("save", function (next) {
+ChildSchema.methods.updateChildFields = function () {
   const currentDate = new Date();
-  const ageInYears = currentDate.getFullYear() - this.dateOfBirth.getFullYear() + 1; 
+  const ageInYears = currentDate.getFullYear() - this.dateOfBirth.getFullYear() + 1;
 
   this.testGrade = ageGradeMapping[ageInYears] || "Age not eligible for testing";
   this.ageGroup = ageGroupMapping[this.testGrade] || "Age not eligible for testing";
-  
+};
+
+ChildSchema.pre("save", function (next) {
+  this.updateChildFields();
   next();
+});
+
+ChildSchema.pre("findOneAndUpdate", async function (next) {
+  const docToUpdate = await this.model.findOne(this.getQuery());
+  docToUpdate.updateChildFields();
+  docToUpdate.updatedAt = new Date();
+  await docToUpdate.save();
+  next();
+});
+
+ChildSchema.post("findOneAndUpdate", async function () {
+  await this.model.findOneAndUpdate({ _id: this._conditions._id }, { $set: { updatedAt: new Date() } });
 });
 
 const Child = mongoose.model("Child", ChildSchema);
