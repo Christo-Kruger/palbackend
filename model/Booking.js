@@ -32,7 +32,7 @@ BookingSchema.pre("save", async function (next) {
     
     // Check the child's test grade to determine the price
     if (child.testGrade === "5 Year Old") {
-      this.price = 10000;
+      this.price = 15000;
     } else if (
       child.testGrade === "6 Year Old" ||
       child.testGrade === "7 Year Old"
