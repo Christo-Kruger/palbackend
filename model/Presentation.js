@@ -19,6 +19,7 @@ const PresentationSchema = new mongoose.Schema({
   description: { type: String, required: true },
   location: { type: String, required: true },
   date: { type: Date, required: true },
+  ageGroup: { type: String, required: true }, // New field
   timeSlots: [TimeSlotSchema],
 });
 

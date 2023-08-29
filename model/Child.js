@@ -5,6 +5,7 @@ const ChildSchema = new mongoose.Schema({
   name: { type: String, required: true },
   previousSchool: { type: String, required: true },
   dateOfBirth: { type: Date, required: true },
+  ageGroup: { type: String },
   gender:{ type: String, enum:[
     "male",
     "female"
@@ -29,17 +30,33 @@ const ChildSchema = new mongoose.Schema({
 });
 
 const ageGradeMapping = {
-  5: "5 Year Old",
-  6: "6 Year Old",
-  7: "7 Year Old",
-  8: "1st Grade",
-  9: "2nd Grade",
-  10: "3rd Grade",
-  11: "4th Grade",
-  12: "5th Grade",
-  13: "6th Grade",
-  14: "7th Grade",
-  15: "8th Grade",
+  3: "5 Year Old",
+  4: "6 Year Old",
+  5: "7 Year Old",
+  6: "1st Grade",
+  7: "2nd Grade",
+  8: "3rd Grade",
+  9: "4th Grade",
+  10: "5th Grade",
+  11: "6th Grade",
+  12: "7th Grade",
+  13: "8th Grade",
+};
+
+
+
+const ageGroupMapping = {
+  "5 Year Old": "Kids",
+  "6 Year Old": "Kids",
+  "7 Year Old": "Kids",
+  "1st Grade": "Elementary",
+  "2nd Grade": "Elementary",
+  "3rd Grade": "Elementary",
+  "4th Grade": "Elementary",
+  "5th Grade": "Elementary",
+  "6th Grade": "Elementary",
+  "7th Grade": "Elementary",
+  "8th Grade": "Elementary",
 };
 
 ChildSchema.pre("save", function (next) {
@@ -47,6 +64,7 @@ ChildSchema.pre("save", function (next) {
   const ageInYears = currentDate.getFullYear() - this.dateOfBirth.getFullYear() + 1; 
 
   this.testGrade = ageGradeMapping[ageInYears] || "Age not eligible for testing";
+  this.ageGroup = ageGroupMapping[this.testGrade] || "Age not eligible for testing";
   
   next();
 });

@@ -1,12 +1,14 @@
 const express = require("express");
 const router = express.Router();
 const User = require("../model/User");
+const Child = require("../model/Child");
 const jwt = require("jsonwebtoken");
 const { sendSMS } = require("../services/smsService");
 const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
 const auth = require("../middleware/auth");
 const pdf = require("pdfkit");
+
 
 router.post("/register", async (req, res) => {
   try {
@@ -116,6 +118,18 @@ router.get("/parents", async (req, res) => {
       .json({ error: "An error occurred while fetching parents." });
   }
 });
+
+//Get Children
+
+router.get("/:id/children", async (req, res) => {
+  try {
+    const children = await Child.find();
+    res.json(children);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch children." });
+  }
+});
+
 
 //Update
 router.put("/user/:id", auth, async (req, res) => {

@@ -46,14 +46,23 @@ router.get("/", async (req, res) => {
 });
 
 router.get('/myBookings', auth, async (req, res) => {
-    try {
-        const presentations = await Presentation.find({ 'timeSlots.attendees._id': req.user._id })
-            .populate('timeSlots.attendees._id');
+  try {
+      const presentations = await Presentation.find({ 'timeSlots.attendees._id': req.user._id });
 
-        res.json(presentations);
-    } catch (err) {
-        res.status(500).send('Server Error');
-    }
+      const myBookings = presentations.map(presentation => {
+          const myTimeSlot = presentation.timeSlots.find(timeSlot => 
+              timeSlot.attendees.some(attendee => attendee._id.toString() === req.user._id.toString())
+          );
+          return {
+              ...presentation.toObject(),
+              timeSlots: [myTimeSlot],
+          };
+      });
+
+      res.json(myBookings);
+  } catch (err) {
+      res.status(500).send('Server Error');
+  }
 });
 
 
@@ -393,6 +402,28 @@ router.delete(
   }
 );
 
+router.delete('/parent/:id/attendees/:userId', getPresentation, auth, async (req, res) => {
+  const {  userId } = req.params;
+
+  try {
+    const presentation = await Presentation.findOne({ _id: req.params.id });
+    if (!presentation) {
+      return res.status(404).json({ message: 'Presentation not found' });
+    }
+
+    presentation.timeSlots.forEach(timeSlot => {
+      timeSlot.attendees = timeSlot.attendees.filter(attendee => attendee._id.toString() !== userId);
+    });
+
+    const updatedPresentation = await presentation.save();
+    
+    res.json(updatedPresentation);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+
 router.get("/presentationsWithAttendees", async (req, res) => {
   try {
     const presentations = await Presentation.find()
@@ -428,6 +459,7 @@ router.post("/", async (req, res) => {
     description: req.body.description,
     location: req.body.location,
     date: req.body.date,
+    ageGroup: req.body.ageGroup,
     timeSlots: timeSlots,
   });
 
@@ -467,7 +499,7 @@ router.put("/:id", getPresentation, async (req, res) => {
   }
 });
 
-//BOOK PRESENTATION
+// BOOK PRESENTATION
 router.patch("/:id/slots/:slotId/attendees", auth, async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -476,47 +508,51 @@ router.patch("/:id/slots/:slotId/attendees", auth, async (req, res) => {
     const presentation = await Presentation.findById(req.params.id);
     const timeSlot = presentation.timeSlots.id(req.params.slotId);
     const userIdString = req.user._id.toString();
+    const user = await User.findById(req.user._id).populate('children');
 
-    const isBookedInCurrentPresentation = presentation.timeSlots.some(
-      (timeSlot) =>
-        timeSlot.attendees.map((attendee) => attendee._id.toString()).includes(userIdString)
-    );
+    // Check if the user has any children in the same age group
+    const isChildInAgeGroup = user.children.some(child => {
+      return child.ageGroup === presentation.ageGroup;
+    });
 
-    if (isBookedInCurrentPresentation) {
+    if (!isChildInAgeGroup) {
       return res.status(400).json({
-        message: "You've already booked a time slot in this presentation.",
+        message: "You don't have any children in this age group.",
       });
     }
 
-    const allPresentations = await Presentation.find();
-    const isBookedInAnyPresentation = allPresentations.some((presentation) =>
+    // Check if the user has already booked a presentation in the same age group
+    const allPresentations = await Presentation.find({ ageGroup: presentation.ageGroup });
+    
+    const isBookedInSameAgeGroup = allPresentations.some((presentation) =>
       presentation.timeSlots.some((timeSlot) =>
         timeSlot.attendees.map((attendee) => attendee._id.toString()).includes(userIdString)
       )
     );
 
-    if (isBookedInAnyPresentation) {
+    if (isBookedInSameAgeGroup) {
       return res.status(400).json({
-        message: "You've already booked a presentation. You can't book again.",
+        message: "You've already booked a presentation for this age group. You can't book again.",
       });
     }
 
+    // Check if the time slot is full
     if (timeSlot.attendees.length >= timeSlot.maxAttendees) {
-      return res
-        .status(400)
-        .json({ message: "You've already booked this time slot." });
+      return res.status(400).json({
+        message: "This time slot is already fully booked.",
+      });
     }
 
+    // Add the user to the time slot
     timeSlot.attendees.push({ _id: req.user._id, bookedAt: Date.now() });
     timeSlot.availableSlots -= 1;
     await presentation.save({ session });
 
-    const user = await User.findById(req.user._id);
-
+    // Update the user's QR code
     const attendeeName = user.name;
     const attendeePhone = user.phone;
     const timeSlotStartTime = timeSlot.startTime;
-    const userID = user._id
+    const userID = user._id;
 
     const qrCodeData = `${attendeeName},${attendeePhone},${timeSlotStartTime}, ${userID}`;
     const qrCodeDataURL = await QRCode.toDataURL(qrCodeData);
@@ -525,7 +561,7 @@ router.patch("/:id/slots/:slotId/attendees", auth, async (req, res) => {
     user.qrCodeDataURL = qrCodeBinaryData;
     await user.save({ session });
 
-    
+    // Send the booking confirmation SMS
     const message = `Hello ${user.name},
 
     You have successfully booked the presentation:
@@ -543,16 +579,18 @@ router.patch("/:id/slots/:slotId/attendees", auth, async (req, res) => {
 
     await smsService.sendSMS(user.phone, message);
 
+    // Commit the transaction and end the session
     await session.commitTransaction();
     session.endSession();
     res.json(timeSlot);
+
   } catch (err) {
+    // Abort the transaction and end the session
     await session.abortTransaction();
     session.endSession();
     res.status(400).json({ message: err.message });
   }
 });
-
 
 
 
