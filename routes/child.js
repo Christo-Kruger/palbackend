@@ -79,38 +79,38 @@ router.patch('/parent/:childId', async (req, res) => {
 
 //Create a child
 
-// POST route to create a new child
+/// POST route to create a new child
 router.post("/", auth, async (req, res) => {
-    try {
-      // Extract the data from the request body
-      const { name, previousSchool, dateOfBirth,gender } = req.body;
-      const parent = req.user._id; // the id of the parent (User)
-  
-      // Create a new child instance
-      const child = new Child({
-        name: name,
-        previousSchool: previousSchool,
-        dateOfBirth: dateOfBirth,
-        gender: gender,
-        parent: parent,
-      });
-  
-      // Save the child to the database
-      await child.save();
-  
-      // Find the parent user and add the child's ID
-      const user = await User.findById(parent);
-      if (user) {
-        user.children.push(child._id);  // Here, the child's ID is added to the parent model
-        await user.save();
-      }
+  try {
+    // Extract the data from the request body
+    const { name, previousSchool, dateOfBirth, gender } = req.body;
+    const parent = req.user._id; // the id of the parent (User)
 
-      // Return the created child in the response
-      res.status(201).json(child);
-    } catch (error) {
-      console.log("Error creating child:", error);
-      res.status(500).send("Error creating the child.");
+    // Create a new child instance
+    const child = new Child({
+      name,
+      previousSchool,
+      dateOfBirth: new Date(dateOfBirth),
+      gender,
+      parent,
+    });
+
+    // Save the child to the database
+    await child.save();
+
+    // Find the parent user and add the child's ID
+    const user = await User.findById(parent);
+    if (user) {
+      user.children.push(child._id);
+      await user.save();
     }
+
+    // Return the created child in the response
+    res.status(201).json(child);
+  } catch (error) {
+    console.log("Error creating child:", error);
+    res.status(500).send("Error creating the child.");
+  }
 });
 
 

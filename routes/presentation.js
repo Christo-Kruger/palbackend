@@ -332,74 +332,77 @@ router.get("/presentations", async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 });
-router.get('/:presentationId/timeSlots', async (req, res) => {
+router.get("/:presentationId/timeSlots", async (req, res) => {
   try {
     const { presentationId } = req.params;
     const presentation = await Presentation.findById(presentationId);
     if (!presentation) {
-      return res.status(404).send({ error: 'Presentation not found' });
+      return res.status(404).send({ error: "Presentation not found" });
     }
     res.send(presentation.timeSlots);
   } catch (error) {
     console.error(error);
-    res.status(500).send({ error: 'Internal Server Error' });
+    res.status(500).send({ error: "Internal Server Error" });
   }
 });
 
-router.patch('/:presentationId/changeSlot', async (req, res) => {
+router.patch("/:presentationId/changeSlot", async (req, res) => {
   try {
     const { presentationId } = req.params;
-    const { userId, oldSlotId, newSlotId } = req.body; 
+    const { userId, oldSlotId, newSlotId } = req.body;
 
     const presentation = await Presentation.findById(presentationId);
     if (!presentation) {
-      return res.status(404).send({ error: 'Presentation not found' });
+      return res.status(404).send({ error: "Presentation not found" });
     }
 
     const oldSlot = presentation.timeSlots.id(oldSlotId);
     if (!oldSlot) {
-      return res.status(400).send({ error: 'Old slot not found' });
+      return res.status(400).send({ error: "Old slot not found" });
     }
-    
-    const oldAttendee = oldSlot.attendees.find((attendee) => attendee._id.toString() === userId.toString());
+
+    const oldAttendee = oldSlot.attendees.find(
+      (attendee) => attendee._id.toString() === userId.toString()
+    );
     if (!oldAttendee) {
-      return res.status(400).send({ error: 'User not found in old slot' });
+      return res.status(400).send({ error: "User not found in old slot" });
     }
-    
-    oldSlot.attendees = oldSlot.attendees.filter((attendee) => attendee._id.toString() !== userId.toString());
+
+    oldSlot.attendees = oldSlot.attendees.filter(
+      (attendee) => attendee._id.toString() !== userId.toString()
+    );
     oldSlot.availableSlots += 1;
 
-    presentation.markModified('timeSlots');
+    presentation.markModified("timeSlots");
 
     const newSlot = presentation.timeSlots.id(newSlotId);
     if (!newSlot) {
-      return res.status(400).send({ error: 'New slot not found' });
+      return res.status(400).send({ error: "New slot not found" });
     }
     if (newSlot.attendees.length >= newSlot.maxAttendees) {
-      return res.status(400).send({ error: 'The new slot is already fully booked' });
+      return res
+        .status(400)
+        .send({ error: "The new slot is already fully booked" });
     }
 
     const newAttendee = {
       _id: oldAttendee._id,
-      bookedAt: oldAttendee.bookedAt
+      bookedAt: oldAttendee.bookedAt,
     };
 
     newSlot.attendees.push(newAttendee);
     newSlot.availableSlots -= 1;
 
-    presentation.markModified('timeSlots');
+    presentation.markModified("timeSlots");
 
     await presentation.save();
 
-    return res.send({ success: 'Successfully changed the slot' });
-
+    return res.send({ success: "Successfully changed the slot" });
   } catch (error) {
-    console.error('Error changing slot:', error);
-    return res.status(500).send({ error: 'Internal Server Error' });
+    console.error("Error changing slot:", error);
+    return res.status(500).send({ error: "Internal Server Error" });
   }
 });
-
-
 
 // Get presentations by attendee
 router.get("/user/:userId", async (req, res) => {
@@ -564,12 +567,13 @@ router.put("/:id", getPresentation, async (req, res) => {
   if (req.body.date) {
     res.presentation.date = req.body.date;
   }
-  if (req.body.time) {
-    res.presentation.time = req.body.time;
+  if (req.body.ageGroup) {
+    res.presentation.ageGroup = req.body.ageGroup;
   }
-  if (req.body.attendees) {
-    res.presentation.attendees = req.body.attendees;
+  if (req.body.timeSlots) {
+    res.presentation.timeSlots = req.body.timeSlots;
   }
+
   try {
     const updatedPresentation = await res.presentation.save();
     res.json(updatedPresentation);
@@ -577,6 +581,7 @@ router.put("/:id", getPresentation, async (req, res) => {
     res.status(400).json({ message: err.message });
   }
 });
+
 
 // BOOK PRESENTATION
 router.patch("/:id/slots/:slotId/attendees", auth, async (req, res) => {
@@ -593,16 +598,16 @@ router.patch("/:id/slots/:slotId/attendees", auth, async (req, res) => {
     const childInAgeGroup = user.children.find((child) => {
       return child.ageGroup === presentation.ageGroup;
     });
-    
+
     if (!childInAgeGroup) {
       return res.status(400).json({
-        message: "You don't have any children in this age group.",
+        message:
+          "해당 연령의 학생이 확인되지 않습니다. [등록학생정보]에서 생년월일을 확인해주시기 바랍니다.",
       });
     }
-    
+
     const childName = childInAgeGroup.name;
     const childTestGrade = childInAgeGroup.testGrade;
-    
 
     // Check if the user has already booked a presentation in the same age group
     const allPresentations = await Presentation.find({
@@ -620,7 +625,7 @@ router.patch("/:id/slots/:slotId/attendees", auth, async (req, res) => {
     if (isBookedInSameAgeGroup) {
       return res.status(400).json({
         message:
-        "이 연령대의 프레젠테이션을 이미 예약하셨습니다. 다시 예약하실 수 없습니다.",
+          "이 연령대의 프레젠테이션을 이미 예약하셨습니다. 다시 예약하실 수 없습니다.",
       });
     }
 

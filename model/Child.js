@@ -10,17 +10,17 @@ const ChildSchema = new mongoose.Schema({
     type: String,
     enum: [
       "Age not eligible for testing",
-      "5 Year Old",
-      "6 Year Old",
-      "7 Year Old",
-      "1st Grade",
-      "2nd Grade",
-      "3rd Grade",
-      "4th Grade",
-      "5th Grade",
-      "6th Grade",
-      "7th Grade",
-      "8th Grade",
+      "예비 5세",
+      "예비 6세",
+      "예비 7세",
+      "예비 초등 1학년",
+      "예비 초등 2학년",
+      "예비 초등 3학년",
+      "예비 초등 4학년",
+      "예비 초등 5학년",
+      "예비 초등 6학년",
+      "예비 중등 1학년",
+      "예비 중등 2학년",
     ],
   },
   parent: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
@@ -31,38 +31,40 @@ const ageGradeMapping = {
   2023: "Age not eligible for testing",
   2022: "Age not eligible for testing",
   2021: "Age not eligible for testing",
-  2020: "5 Year Old",
-  2019: "6 Year Old",
-  2018: "7 Year Old",
-  2017: "1st Grade",
-  2016: "2nd Grade",
-  2015: "3rd Grade",
-  2014: "4th Grade",
-  2013: "5th Grade",
-  2012: "6th Grade",
-  2011: "7th Grade",
-  2010: "8th Grade",
+  2020: "예비 5세",
+  2019: "예비 6세",
+  2018: "예비 7세",
+  2017: "예비 초등 1학년",
+  2016: "예비 초등 2학년",
+  2015: "예비 초등 3학년",
+  2014: "예비 초등 4학년",
+  2013: "예비 초등 5학년",
+  2012: "예비 초등 6학년",
+  2011: "예비 중등 1학년",
+  2010: "예비 중등 2학년",
 };
 
-
 const ageGroupMapping = {
-  "5 Year Old": "Kids",
-  "6 Year Old": "Kids",
-  "7 Year Old": "Kids",
-  "1st Grade": "Elementary",
-  "2nd Grade": "Elementary",
-  "3rd Grade": "Elementary",
-  "4th Grade": "Elementary",
-  "5th Grade": "Elementary",
-  "6th Grade": "Elementary",
-  "7th Grade": "Elementary",
-  "8th Grade": "Elementary",
+  "Age not eligible for testing": "Not Eligible",
+  "예비 5세": "Kids",
+  "예비 6세": "Kids",
+  "예비 7세": "Kids",
+  "예비 초등 1학년": "Elementary",
+  "예비 초등 2학년": "Elementary",
+  "예비 초등 3학년": "Elementary",
+  "예비 초등 4학년": "Elementary",
+  "예비 초등 5학년": "Elementary",
+  "예비 초등 6학년": "Elementary",
+  "예비 중등 1학년": "Middle School",
+  "예비 중등 2학년": "Middle School",
 };
 
 ChildSchema.methods.updateChildFields = function () {
   const yearOfBirth = this.dateOfBirth.getFullYear();
-  this.testGrade = ageGradeMapping[yearOfBirth] || "Age not eligible for testing";
-  this.ageGroup = ageGroupMapping[this.testGrade] || "Age not eligible for testing";
+  this.testGrade =
+    ageGradeMapping[yearOfBirth] || "Age not eligible for testing";
+  this.ageGroup =
+    ageGroupMapping[this.testGrade] || "Age not eligible for testing";
 };
 
 ChildSchema.pre("save", function (next) {
@@ -79,7 +81,10 @@ ChildSchema.pre("findOneAndUpdate", async function (next) {
 });
 
 ChildSchema.post("findOneAndUpdate", async function () {
-  await this.model.findOneAndUpdate({ _id: this._conditions._id }, { $set: { updatedAt: new Date() } });
+  await this.model.findOneAndUpdate(
+    { _id: this._conditions._id },
+    { $set: { updatedAt: new Date() } }
+  );
 });
 
 const Child = mongoose.model("Child", ChildSchema);
