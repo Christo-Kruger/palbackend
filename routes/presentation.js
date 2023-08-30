@@ -274,7 +274,7 @@ router.get("/allAttendeesInTimeSlots", auth, async (req, res) => {
               // Assuming children is an array of references and you want to get the name and testGrade of each child
               await User.populate(attendee._id, {
                 path: "children",
-                select: "name testGrade",
+                select: "name testGrade gender",
               });
             }
           }
@@ -349,9 +349,8 @@ router.get('/:presentationId/timeSlots', async (req, res) => {
 router.patch('/:presentationId/changeSlot', async (req, res) => {
   try {
     const { presentationId } = req.params;
-    const { userId, oldSlotId, newSlotId } = req.body; // Replace userId with authentication
+    const { userId, oldSlotId, newSlotId } = req.body; 
 
-    // Find the specific presentation
     const presentation = await Presentation.findById(presentationId);
     if (!presentation) {
       return res.status(404).send({ error: 'Presentation not found' });
@@ -361,6 +360,12 @@ router.patch('/:presentationId/changeSlot', async (req, res) => {
     if (!oldSlot) {
       return res.status(400).send({ error: 'Old slot not found' });
     }
+    
+    const oldAttendee = oldSlot.attendees.find((attendee) => attendee._id.toString() === userId.toString());
+    if (!oldAttendee) {
+      return res.status(400).send({ error: 'User not found in old slot' });
+    }
+    
     oldSlot.attendees = oldSlot.attendees.filter((attendee) => attendee._id.toString() !== userId.toString());
     oldSlot.availableSlots += 1;
 
@@ -373,7 +378,13 @@ router.patch('/:presentationId/changeSlot', async (req, res) => {
     if (newSlot.attendees.length >= newSlot.maxAttendees) {
       return res.status(400).send({ error: 'The new slot is already fully booked' });
     }
-    newSlot.attendees.push({ _id: userId });
+
+    const newAttendee = {
+      _id: oldAttendee._id,
+      bookedAt: oldAttendee.bookedAt
+    };
+
+    newSlot.attendees.push(newAttendee);
     newSlot.availableSlots -= 1;
 
     presentation.markModified('timeSlots');
@@ -387,6 +398,8 @@ router.patch('/:presentationId/changeSlot', async (req, res) => {
     return res.status(500).send({ error: 'Internal Server Error' });
   }
 });
+
+
 
 // Get presentations by attendee
 router.get("/user/:userId", async (req, res) => {
@@ -607,7 +620,7 @@ router.patch("/:id/slots/:slotId/attendees", auth, async (req, res) => {
     if (isBookedInSameAgeGroup) {
       return res.status(400).json({
         message:
-          "You've already booked a presentation for this age group. You can't book again.",
+        "이 연령대의 프레젠테이션을 이미 예약하셨습니다. 다시 예약하실 수 없습니다.",
       });
     }
 

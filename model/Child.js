@@ -28,18 +28,22 @@ const ChildSchema = new mongoose.Schema({
 });
 
 const ageGradeMapping = {
-  3: "5 Year Old",
-  4: "6 Year Old",
-  5: "7 Year Old",
-  6: "1st Grade",
-  7: "2nd Grade",
-  8: "3rd Grade",
-  9: "4th Grade",
-  10: "5th Grade",
-  11: "6th Grade",
-  12: "7th Grade",
-  13: "8th Grade",
+  2023: "Age not eligible for testing",
+  2022: "Age not eligible for testing",
+  2021: "Age not eligible for testing",
+  2020: "5 Year Old",
+  2019: "6 Year Old",
+  2018: "7 Year Old",
+  2017: "1st Grade",
+  2016: "2nd Grade",
+  2015: "3rd Grade",
+  2014: "4th Grade",
+  2013: "5th Grade",
+  2012: "6th Grade",
+  2011: "7th Grade",
+  2010: "8th Grade",
 };
+
 
 const ageGroupMapping = {
   "5 Year Old": "Kids",
@@ -56,10 +60,8 @@ const ageGroupMapping = {
 };
 
 ChildSchema.methods.updateChildFields = function () {
-  const currentDate = new Date();
-  const ageInYears = currentDate.getFullYear() - this.dateOfBirth.getFullYear() + 1;
-
-  this.testGrade = ageGradeMapping[ageInYears] || "Age not eligible for testing";
+  const yearOfBirth = this.dateOfBirth.getFullYear();
+  this.testGrade = ageGradeMapping[yearOfBirth] || "Age not eligible for testing";
   this.ageGroup = ageGroupMapping[this.testGrade] || "Age not eligible for testing";
 };
 
