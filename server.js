@@ -10,11 +10,9 @@ app.use(express.json());
 var allowedOrigins = [
   "http://localhost:3000",
   "https://jlee-reserve.vercel.app/",
-  "https://pal-git-main-christo-kruger.vercel.app",
-  "https://pal-n3o2wifbx-christo-kruger.vercel.app",
-  "https://pal-2j0q0q0x0-christo-kruger.vercel.app",
+  "https://jlee-christo-kruger.vercel.app/",
+  "https://jlee-christo-kruger.vercel.app/",
 ];
-
 
 app.use(
   cors({
@@ -30,8 +28,7 @@ app.use(
     },
   })
 );
-app.set('etag', false); // in your main server file where you define your app
-
+app.set("etag", false); // in your main server file where you define your app
 
 app.use(morgan("combined"));
 
@@ -50,9 +47,9 @@ const campusRoutes = require("./routes/campus");
 const childRoutes = require("./routes/child");
 const presentationRoute = require("./routes/presentation");
 const smsRoute = require("./routes/sms");
-const timeSlots= require("./routes/timeSlots");
-const priorityBooking =require ("./routes/bookingPriority")
-const qr = require("./routes/qrscanner")
+const timeSlots = require("./routes/timeSlots");
+const priorityBooking = require("./routes/bookingPriority");
+const qr = require("./routes/qrscanner");
 
 app.use("/api/users", userRoutes);
 app.use("/api/bookings", bookingRoutes);
@@ -63,7 +60,6 @@ app.use("/api/sms", smsRoute);
 app.use("/api/timeSlots", timeSlots);
 app.use("/api/bookingPriority", priorityBooking);
 app.use("/api/qr", qr);
-
 
 const port = process.env.PORT || 9001;
 app.listen(port, () => console.log(`Server started on port ${port}`));
