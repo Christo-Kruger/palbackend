@@ -9,9 +9,9 @@ const app = express();
 app.use(express.json());
 var allowedOrigins = [
   "http://localhost:3000",
-  "https://jlee-reserve.vercel.app/",
-  "https://jlee-christo-kruger.vercel.app/",
-  "https://jlee-christo-kruger.vercel.app/",
+  "https://jlee-reserve.vercel.app",
+  "https://jlee-christo-kruger.vercel.app",
+  "https://jlee-christo-kruger.vercel.app",
 ];
 
 app.use(
