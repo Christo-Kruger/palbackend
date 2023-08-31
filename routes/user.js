@@ -38,12 +38,12 @@ router.post("/register", async (req, res) => {
 });
 
 router.post("/login", async (req, res) => {
-  const user = await User.findOne({ email: req.body.email });
+  const user = await User.findOne({ phone: req.body.phone });
   console.log(user); // Log the user returned from the query
 
   if (!user || !(await user.isValidPassword(req.body.password))) {
     console.log("The user is invalid or the password is incorrect");
-    return res.status(400).send("Invalid email or password.");
+    return res.status(400).send("Invalid phone or password.");
   }
 
   const token = jwt.sign(
@@ -292,35 +292,7 @@ router.put("/admin/:adminId", async (req, res) => {
   }
 });
 
-router.post("/password-reset-request", async (req, res) => {
-  try {
-    const user = await User.findOne({ phone: req.body.phone });
-    if (!user) {
-      return res
-        .status(400)
-        .json({ error: "This phone number is not registered." });
-    }
 
-    const buffer = crypto.randomBytes(20);
-    const token = buffer.toString("hex");
-
-    // you'll need to add resetToken and resetTokenExpires to your User model
-    user.resetToken = token;
-    user.resetTokenExpires = Date.now() + 3600000; // token is valid for 1 hour
-
-    await user.save();
-
-    // send the SMS here
-    const message = `Your password reset code is ${token}. This code will expire in 1 hour.`;
-    await sendSMS(user.phone, message);
-
-    res.send("Password reset SMS sent.");
-  } catch (error) {
-    res
-      .status(500)
-      .json({ error: "An error occurred while processing your request." });
-  }
-});
 
 router.patch("/:userId/attendedPresentation", async (req, res) => {
   const userId = req.params.userId;
@@ -342,35 +314,72 @@ router.patch("/:userId/attendedPresentation", async (req, res) => {
       .json({ error: "An error occurred while updating attendance." });
   }
 });
+// Generate Reset Token and Send SMS
+router.post('/forgot-password', async (req, res) => {
+  const { phoneNumber } = req.body;
 
-router.post("/password-reset", async (req, res) => {
   try {
-    const { resetToken, newPassword } = req.body;
+    const user = await User.findOne({ phone: phoneNumber });
 
+    if (!user) {
+      return res.status(400).json({ error: 'User with this phone number does not exist.' });
+    }
+
+    const resetToken = crypto.randomBytes(2).toString('hex');
+    const resetTokenExpires = Date.now() + 3600000; // 1 hour
+
+    user.resetToken = resetToken;
+    user.resetTokenExpires = resetTokenExpires;
+    await user.save();
+
+    const message = `You are receiving this because you (or someone else) have requested the reset of the password for your account.\n\n
+     ${resetToken}\n\n
+      If you did not request this, please ignore this SMS and your password will remain unchanged.\n`;
+
+    try {
+      const response = await sendSMS(phoneNumber, message);
+      console.log('Response from Naver Cloud SMS:', response);
+    } catch (error) {
+      console.error('Error sending SMS:', error);
+      return res.status(500).json({ error: 'An error occurred while sending the SMS.' });
+    }
+
+    res.send('SMS has been sent. Please check your phone.');
+ } catch (error) {
+    console.error('Error processing request:', error);
+    res.status(500).json({ error: 'An error occurred while processing your request.' });
+  }
+
+});
+
+
+// Reset Password
+router.post('/reset-password', async (req, res) => {
+  const { resetToken, newPassword } = req.body;
+
+  try {
     const user = await User.findOne({
       resetToken,
       resetTokenExpires: { $gt: Date.now() },
     });
 
     if (!user) {
-      return res.status(400).json({ error: "Invalid or expired reset token." });
+      return res.status(400).json({ error: 'Invalid or expired reset token.' });
     }
 
-    // Hash the new password before saving
     const salt = await bcrypt.genSalt(10);
     user.password = await bcrypt.hash(newPassword, salt);
 
     user.resetToken = undefined;
     user.resetTokenExpires = undefined;
-
     await user.save();
 
-    res.send("Password has been successfully reset.");
+    res.send('Password has been successfully reset.');
   } catch (error) {
-    res
-      .status(500)
-      .json({ error: "An error occurred while processing your request." });
+    res.status(500).json({ error: 'An error occurred while processing your request.' });
   }
 });
+
+
 
 module.exports = router;
