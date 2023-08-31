@@ -260,7 +260,7 @@ router.get("/allAttendeesInTimeSlots", auth, async (req, res) => {
     const populationOptions = {
       path: "timeSlots.attendees._id",
       model: "User",
-      select: "name email phone campus attendedPresentation children", // added children here
+      select: "name email phone campus attendedPresentation children",
     };
 
     if (req.user.role === "superadmin") {
@@ -276,16 +276,18 @@ router.get("/allAttendeesInTimeSlots", auth, async (req, res) => {
         .lean();
     }
 
-    // If the `children` field on the User model is another reference, populate it as well
     if (presentations) {
       for (let presentation of presentations) {
         for (let slot of presentation.timeSlots) {
           for (let attendee of slot.attendees) {
             if (attendee._id && attendee._id.children) {
-              // Assuming children is an array of references and you want to get the name and testGrade of each child
               await User.populate(attendee._id, {
                 path: "children",
-                select: "name testGrade gender",
+                select: "name testGrade gender ageGroup",
+                populate: {
+                  path: "ageGroup",
+                  select: "name",
+                },
               });
             }
           }
@@ -302,9 +304,11 @@ router.get("/allAttendeesInTimeSlots", auth, async (req, res) => {
           attendees: slot.attendees
             .map((attendee) => {
               if (!attendee._id) {
-                // Handle or skip this attendee. Here, we return null.
                 return null;
               }
+              const filteredChildren = attendee._id.children.filter(
+                (child) => child.ageGroup && child.ageGroup.name === presentation.ageGroup
+              );
               return {
                 _id: attendee._id._id,
                 name: attendee._id.name,
@@ -313,10 +317,10 @@ router.get("/allAttendeesInTimeSlots", auth, async (req, res) => {
                 campus: attendee._id.campus,
                 bookedAt: attendee.bookedAt,
                 attendedPresentation: attendee._id.attendedPresentation,
-                children: attendee._id.children, // Adding children data
+                children: filteredChildren,
               };
             })
-            .filter(Boolean), // This will remove any null attendees from the array
+            .filter(Boolean),
         })),
       };
     });
@@ -674,6 +678,12 @@ ${childrenNames} 학부모님
 ■ 장소: ${presentation.location}
   
 ■ 참석가능인원: 1명 (참석 인원이 제한되어 학부모 1명만 입장이 가능합니다.★유아 동반 불가★)
+
+추가적인 문의사항이 있으실 경우 각 캠퍼스로 연락해주시기 바랍니다.
+-분당:031-713-9405
+-수지:031-526-9777
+-동탄:031-373-1633
+
 감사합니다.`;
 
     await smsService.sendSMS(user.phone, message);

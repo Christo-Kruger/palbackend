@@ -325,7 +325,7 @@ router.post('/forgot-password', async (req, res) => {
       return res.status(400).json({ error: 'User with this phone number does not exist.' });
     }
 
-    const resetToken = crypto.randomBytes(2).toString('hex');
+    const resetToken = crypto.randomBytes(20).toString('hex');
     const resetTokenExpires = Date.now() + 3600000; // 1 hour
 
     user.resetToken = resetToken;
@@ -349,27 +349,24 @@ router.post('/forgot-password', async (req, res) => {
     console.error('Error processing request:', error);
     res.status(500).json({ error: 'An error occurred while processing your request.' });
   }
-
 });
 
 
-// Reset Password
+
 router.post('/reset-password', async (req, res) => {
   const { resetToken, newPassword } = req.body;
 
   try {
     const user = await User.findOne({
       resetToken,
-      resetTokenExpires: { $gt: Date.now() },
+      resetTokenExpires: { $gt: new Date(Date.now()) },
     });
 
     if (!user) {
       return res.status(400).json({ error: 'Invalid or expired reset token.' });
     }
 
-    const salt = await bcrypt.genSalt(10);
-    user.password = await bcrypt.hash(newPassword, salt);
-
+    user.set({ password: newPassword });
     user.resetToken = undefined;
     user.resetTokenExpires = undefined;
     await user.save();
@@ -379,6 +376,8 @@ router.post('/reset-password', async (req, res) => {
     res.status(500).json({ error: 'An error occurred while processing your request.' });
   }
 });
+
+
 
 
 
