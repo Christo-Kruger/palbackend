@@ -665,10 +665,7 @@ ${childName} 학부모님
       month: "long",
       day: "numeric",
     })}
-■ 시간: ${new Date(timeSlot.startTime).toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-    })}
+■ 시간: ${new Date(timeSlot.startTime)}
 
 ■ 장소: ${presentation.location}
   
