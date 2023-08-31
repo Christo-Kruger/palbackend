@@ -596,19 +596,20 @@ router.patch("/:id/slots/:slotId/attendees", auth, async (req, res) => {
     }
 
     // Check if the user has any children in the same age group
-    const childInAgeGroup = user.children.find((child) => {
+    const childrenInAgeGroup = user.children.filter((child) => {
       return child.ageGroup === presentation.ageGroup;
     });
-
-    if (!childInAgeGroup) {
+    
+    if (!childrenInAgeGroup.length) {
       return res.status(400).json({
         message:
           "해당 연령의 학생이 확인되지 않습니다. [등록학생정보]에서 생년월일을 확인해주시기 바랍니다.",
       });
     }
+    
+    const childrenNames = childrenInAgeGroup.map(child => child.name).join(', ');
+    const childrenTestGrades = childrenInAgeGroup.map(child => child.testGrade).join(', ');
 
-    const childName = childInAgeGroup.name;
-    const childTestGrade = childInAgeGroup.testGrade;
 
     // Check if the user has already booked a presentation in the same age group
     const allPresentations = await Presentation.find({
@@ -654,10 +655,13 @@ router.patch("/:id/slots/:slotId/attendees", auth, async (req, res) => {
 
     user.qrCodeDataURL = qrCodeBinaryData;
     await user.save({ session });
+    
+    
+    const startTimeKST = moment.tz(timeSlot.startTime, "HH:mm", "Asia/Seoul").format('HH:mm');
 
     // Send the booking confirmation SMS
     const message = `안녕하세요.제이리어학원입니다.
-${childName} 학부모님
+${childrenNames} 학부모님
 예약하신 설명회 일정 확인 부탁드립니다.
 [${presentation.name}]
 ■ 날짜: ${new Date(presentation.date).toLocaleDateString("ko-KR", {
@@ -665,7 +669,7 @@ ${childName} 학부모님
       month: "long",
       day: "numeric",
     })}
-■ 시간: ${(timeSlot.startTime)}
+■ 시간: ${startTimeKST}
 
 ■ 장소: ${presentation.location}
   
