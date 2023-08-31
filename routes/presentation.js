@@ -3,11 +3,13 @@ const router = express.Router();
 const Presentation = require("../model/Presentation");
 const auth = require("../middleware/auth");
 const smsService = require("../services/smsService");
+const {sendSMS} = require("../services/smsService");
 const User = require("../model/User");
 const exceljs = require("exceljs");
 const moment = require("moment");
 const QRCode = require("qrcode");
 const mongoose = require("mongoose");
+
 
 const allowedOrigins = [
   "http://localhost:3000",
@@ -38,12 +40,21 @@ router.use((req, res, next) => {
 // Get all presentations
 router.get("/", async (req, res) => {
   try {
-    const presentations = await Presentation.find().lean();
+    const userCampus = req.query.campus;
+    let presentations;
+    if (userCampus === '동탄') {
+      presentations = await Presentation.find({ campus: { $in: ['전체', '동탄'] } }).lean();
+    } else if (['수지', '분당'].includes(userCampus)) {
+      presentations = await Presentation.find({ campus: '전체' }).lean();
+    } else {
+      return res.status(400).json({ message: 'Invalid campus' });
+    }
     res.json(presentations);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
+
 
 router.get("/myBookings", auth, async (req, res) => {
   try {
@@ -456,55 +467,43 @@ router.get("/:id", getPresentation, (req, res) => {
 
 router.delete(
   "/:id/attendees/:attendeeId",
-  getPresentation,
+  auth,
   async (req, res) => {
-    const { attendeeId } = req.params;
-    const { user } = req;
-    const { _id } = user;
+    const { id, attendeeId } = req.params;
+    const { _id: userId, phone: phoneNumber } = req.user;
+
+    // Check if the user is the one to be removed
+    if (attendeeId !== userId) {
+      return res.status(403).json({ message: "Access denied" });
+    }
 
     try {
       const presentation = await Presentation.findOneAndUpdate(
-        { _id: req.params.id },
-        { $pull: { attendees: { _id: attendeeId } } },
+        { _id: id },
+        { $pull: { "timeSlots.$[].attendees": { _id: attendeeId } } },
         { new: true }
       );
+
       if (!presentation) {
         return res.status(404).json({ message: "Presentation not found" });
       }
-      res.json(presentation);
+
+      // Send SMS
+      const message = 'You have successfully removed your record from the attendees list';
+      console.log('Phone number:', phoneNumber);
+     await smsService.sendSMS(phoneNumber, message);
+
+      return res.json(presentation);
+
     } catch (err) {
+      console.error(err);
       res.status(500).json({ message: err.message });
     }
   }
 );
 
-router.delete(
-  "/parent/:id/attendees/:userId",
-  getPresentation,
-  auth,
-  async (req, res) => {
-    const { userId } = req.params;
 
-    try {
-      const presentation = await Presentation.findOne({ _id: req.params.id });
-      if (!presentation) {
-        return res.status(404).json({ message: "Presentation not found" });
-      }
 
-      presentation.timeSlots.forEach((timeSlot) => {
-        timeSlot.attendees = timeSlot.attendees.filter(
-          (attendee) => attendee._id.toString() !== userId
-        );
-      });
-
-      const updatedPresentation = await presentation.save();
-
-      res.json(updatedPresentation);
-    } catch (err) {
-      res.status(500).json({ message: err.message });
-    }
-  }
-);
 
 router.get("/presentationsWithAttendees", async (req, res) => {
   try {
@@ -519,6 +518,7 @@ router.get("/presentationsWithAttendees", async (req, res) => {
 
 // Create presentation
 router.post("/", async (req, res) => {
+  console.log(req.body);
   // Ensure timeSlots are provided and are in an array
   if (!req.body.timeSlots || !Array.isArray(req.body.timeSlots)) {
     return res
@@ -542,6 +542,7 @@ router.post("/", async (req, res) => {
     location: req.body.location,
     date: req.body.date,
     ageGroup: req.body.ageGroup,
+    campus: req.body.campus,
     timeSlots: timeSlots,
   });
 
@@ -593,6 +594,14 @@ router.patch("/:id/slots/:slotId/attendees", auth, async (req, res) => {
     const timeSlot = presentation.timeSlots.id(req.params.slotId);
     const userIdString = req.user._id.toString();
     const user = await User.findById(req.user._id).populate("children");
+    const userCampus = user.campus;
+
+    // Check if the user's campus allows them to book the presentation
+    if (presentation.campus !== '전체' && presentation.campus !== userCampus) {
+      return res.status(400).json({
+        message: "해당 캠퍼스의 프레젠테이션이 아닙니다.",
+      });
+    }
 
     // Check if the user has any children in the same age group
     const childInAgeGroup = user.children.find((child) => {
@@ -655,35 +664,37 @@ router.patch("/:id/slots/:slotId/attendees", auth, async (req, res) => {
     await user.save({ session });
 
     // Send the booking confirmation SMS
-    const message = `안녕하세요. ${user.name},
+      const message = `안녕하세요. ${user.name},
+  
+      예약하신 설명회 일정 확인부탁드립니다.
+      '${presentation.name}'.
+      
+      Details:
+      ■ 날짜: ${new Date(presentation.date).toLocaleDateString()}
+      ■ 시간: ${timeSlot.startTime} - ${timeSlot.endTime}
+      ■ 장소: ${presentation.location}
+  
+      ■ 참석가능인원: 1명 (참석 인원이 제한되어 학부모 1명만 입장이 가능합니다.★유아 동반 불가★)
+  
+      ※ 유의사항 
+      ★설명회 참석시간은 등록순번과 관계가 없습니다. 
+  
+  감사합니다.`;
 
-    예약하신 설명회 일정 확인부탁드립니다.
-    '${presentation.name}'.
-    
-    Details:
-    ■ 날짜: ${new Date(presentation.date).toLocaleDateString()}
-    ■ 시간: ${timeSlot.startTime} - ${timeSlot.endTime}
-    ■ 장소: ${presentation.location}
 
-    ■ 참석가능인원: 1명 (참석 인원이 제한되어 학부모 1명만 입장이 가능합니다.★유아 동반 불가★)
+  await smsService.sendSMS(user.phone, message);
 
-    ※ 유의사항 
-    ★설명회 참석시간은 등록순번과 관계가 없습니다. 
-
-감사합니다.`;
-
-    await smsService.sendSMS(user.phone, message);
-
-    // Commit the transaction and end the session
-    await session.commitTransaction();
-    session.endSession();
-    res.json(timeSlot);
-  } catch (err) {
-    // Abort the transaction and end the session
-    await session.abortTransaction();
-    session.endSession();
-    res.status(400).json({ message: err.message });
-  }
+  // Commit the transaction and end the session
+  await session.commitTransaction();
+  session.endSession();
+  res.json(timeSlot);
+  
+} catch (err) { // Corrected here
+  // Abort the transaction and end the session
+  await session.abortTransaction();
+  session.endSession();
+  res.status(400).json({ message: err.message });
+}
 });
 
 // Replace attendees list

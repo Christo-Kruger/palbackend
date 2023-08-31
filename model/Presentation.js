@@ -19,8 +19,10 @@ const PresentationSchema = new mongoose.Schema({
   description: { type: String, required: true },
   location: { type: String, required: true },
   date: { type: Date, required: true },
+  campus: { type: String, enum: ['전체', '동탄'], required: true },
   ageGroup: { type: String, required: true }, // New field
   timeSlots: [TimeSlotSchema],
+ 
 });
 
 PresentationSchema.methods.addAttendee = async function (slotId, attendee) {
