@@ -489,7 +489,7 @@ router.delete(
       }
 
       // Send SMS
-      const message = 'You have successfully removed your record from the attendees list';
+      const message = '제이리 어학원 설명회 예약이 취소되었습니다. 예약하신 기록은 삭제되었습니다.';
       console.log('Phone number:', phoneNumber);
      await smsService.sendSMS(phoneNumber, message);
 
@@ -664,20 +664,15 @@ router.patch("/:id/slots/:slotId/attendees", auth, async (req, res) => {
     await user.save({ session });
 
     // Send the booking confirmation SMS
-      const message = `안녕하세요. ${user.name},
-  
-      예약하신 설명회 일정 확인부탁드립니다.
-      '${presentation.name}'.
-      
-      Details:
+      const message = `안녕하세요.제이리어학원입니다.
+       ${user.name},학부모님
+       예약하신 설명회 일정 확인부탁드립니다.
+      '[${presentation.name}]'.
       ■ 날짜: ${new Date(presentation.date).toLocaleDateString()}
-      ■ 시간: ${timeSlot.startTime} - ${timeSlot.endTime}
+      ■ 시간: ${ new Date (timeSlot.startTime).toLocaleTimeString()}
       ■ 장소: ${presentation.location}
   
       ■ 참석가능인원: 1명 (참석 인원이 제한되어 학부모 1명만 입장이 가능합니다.★유아 동반 불가★)
-  
-      ※ 유의사항 
-      ★설명회 참석시간은 등록순번과 관계가 없습니다. 
   
   감사합니다.`;
 
