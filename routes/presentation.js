@@ -417,9 +417,10 @@ router.patch("/:presentationId/changeSlot", async (req, res) => {
     if (!user) {
       return res.status(404).send({ error: "User not found" });
     }
-
+    const startTimeNEW = moment.tz(newSlot.startTime, "HH:mm", "Asia/Seoul").format('HH:mm');
+    const startTimeOLD = moment.tz(newSlot.startTime, "HH:mm", "Asia/Seoul").format('HH:mm');
     const phoneNumber = user.phone;
-    const message = `설명회 예약 시간이 ${new Date(oldSlot.startTime).toLocaleTimeString()} 에서 ${new Date(newSlot.startTime).toLocaleTimeString()} 으로 변경되었습니다.`;
+    const message = `설명회 예약 시간이 ${new Date(startTimeNEW).toLocaleTimeString()} 에서 ${new Date(startTimeOLD).toLocaleTimeString()} 으로 변경되었습니다.`;
     await sendSMS(phoneNumber, message);
 
     return res.send({ success: "Successfully changed the slot" });
