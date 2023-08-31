@@ -652,6 +652,7 @@ router.patch("/:id/slots/:slotId/attendees", auth, async (req, res) => {
 
     // Update the user's QR code
     const attendeeName = user.name;
+    const attendeeChild = user.name.child.name
     const attendeePhone = user.phone;
     const timeSlotStartTime = timeSlot.startTime;
     const userID = user._id;
@@ -665,16 +666,15 @@ router.patch("/:id/slots/:slotId/attendees", auth, async (req, res) => {
 
     // Send the booking confirmation SMS
       const message = `안녕하세요.제이리어학원입니다.
-       ${user.name},학부모님
-       예약하신 설명회 일정 확인부탁드립니다.
-      '[${presentation.name}]'.
-      ■ 날짜: ${new Date(presentation.date).toLocaleDateString()}
-      ■ 시간: ${ new Date (timeSlot.startTime).toLocaleTimeString()}
-      ■ 장소: ${presentation.location}
+${attendeeChild} 학부모님
+예약하신 설명회 일정 확인 부탁드립니다.
+[${presentation.name}]
+■ 날짜: ${new Date(presentation.date).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' })}
+■ 시간: ${ new Date (timeSlot.startTime).toLocaleTimeString()}
+■ 장소: ${presentation.location}
   
-      ■ 참석가능인원: 1명 (참석 인원이 제한되어 학부모 1명만 입장이 가능합니다.★유아 동반 불가★)
-  
-  감사합니다.`;
+■ 참석가능인원: 1명 (참석 인원이 제한되어 학부모 1명만 입장이 가능합니다.★유아 동반 불가★)
+감사합니다.`;
 
 
   await smsService.sendSMS(user.phone, message);
