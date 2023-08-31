@@ -665,7 +665,7 @@ ${childName} 학부모님
       month: "long",
       day: "numeric",
     })}
-■ 시간: ${new Date(timeSlot.startTime)}
+■ 시간: ${(timeSlot.startTime)}
 
 ■ 장소: ${presentation.location}
   
