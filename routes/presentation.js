@@ -371,6 +371,7 @@ router.patch("/:presentationId/changeSlot", async (req, res) => {
       return res.status(404).send({ error: "Presentation not found" });
     }
 
+
     const oldSlot = presentation.timeSlots.id(oldSlotId);
     if (!oldSlot) {
       return res.status(400).send({ error: "Old slot not found" });
@@ -411,6 +412,15 @@ router.patch("/:presentationId/changeSlot", async (req, res) => {
     presentation.markModified("timeSlots");
 
     await presentation.save();
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).send({ error: "User not found" });
+    }
+
+    const phoneNumber = user.phone;
+    const message = `설명회 예약 시간이 ${new Date(oldSlot.startTime).toLocaleTimeString()} 에서 ${new Date(newSlot.startTime).toLocaleTimeString()} 으로 변경되었습니다.`;
+    await sendSMS(phoneNumber, message);
 
     return res.send({ success: "Successfully changed the slot" });
   } catch (error) {
