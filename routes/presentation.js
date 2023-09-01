@@ -219,7 +219,7 @@ router.get("/allAttendeesInTimeSlots", auth, async (req, res) => {
       select: "name email phone campus attendedPresentation children",
       populate: {
         path: 'children',
-        select: 'name testGrade ageGroup'
+        select: 'name testGrade ageGroup gender dateOfBirth previousSchool'
       },
     };
     
@@ -255,6 +255,9 @@ router.get("/allAttendeesInTimeSlots", auth, async (req, res) => {
                 bookedAt: attendee.bookedAt,
                 attendedPresentation: attendee._id.attendedPresentation,
                 childName: child.name,
+                dateOfBirth: child.dateOfBirth,
+                previousSchool: child.previousSchool,
+                childGender: child.gender,
                 childTestGrade: child.testGrade,
                 presentationName: presentation.name,
                 startTime: slot.startTime,
