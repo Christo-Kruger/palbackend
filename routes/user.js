@@ -322,7 +322,7 @@ router.post('/forgot-password', async (req, res) => {
     const user = await User.findOne({ phone: phoneNumber });
 
     if (!user) {
-      return res.status(400).json({ error: 'User with this phone number does not exist.' });
+      return res.status(400).json({ error: '전화번호가 잘못 기재되었습니다.' });
     }
 
     const resetToken = crypto.randomBytes(4).toString('hex');
@@ -332,9 +332,8 @@ router.post('/forgot-password', async (req, res) => {
     user.resetTokenExpires = resetTokenExpires;
     await user.save();
 
-    const message = `아래의 코드를 상단에 기재 후 변경하실 비밀번호를 하단에 작성 후 저장하여 사용하여 주시기 바랍니다.\n\n
-     ${resetToken}\n\n
-     비밀번호가 변경되지 않았습니다. 다시한번 인증코드를 받아 실행하여 주시기 바랍니다.\n`;
+    const message = `아래의 인증코드를 기재 후 변경하실 비밀번호를 하단에 작성 해 주시기 바랍니다.\n\n
+인증코드: ${resetToken}\n\n`;
 
     try {
       const response = await sendSMS(phoneNumber, message);
