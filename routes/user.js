@@ -332,9 +332,9 @@ router.post('/forgot-password', async (req, res) => {
     user.resetTokenExpires = resetTokenExpires;
     await user.save();
 
-    const message = `You are receiving this because you (or someone else) have requested the reset of the password for your account.\n\n
+    const message = `아래의 코드를 상단에 기재 후 변경하실 비밀번호를 하단에 작성 후 저장하여 사용하여 주시기 바랍니다.\n\n
      ${resetToken}\n\n
-      If you did not request this, please ignore this SMS and your password will remain unchanged.\n`;
+     비밀번호가 변경되지 않았습니다. 다시한번 인증코드를 받아 실행하여 주시기 바랍니다.\n`;
 
     try {
       const response = await sendSMS(phoneNumber, message);
