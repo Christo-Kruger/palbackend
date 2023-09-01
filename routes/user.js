@@ -325,7 +325,7 @@ router.post('/forgot-password', async (req, res) => {
       return res.status(400).json({ error: 'User with this phone number does not exist.' });
     }
 
-    const resetToken = crypto.randomBytes(20).toString('hex');
+    const resetToken = crypto.randomBytes(4).toString('hex');
     const resetTokenExpires = Date.now() + 3600000; // 1 hour
 
     user.resetToken = resetToken;

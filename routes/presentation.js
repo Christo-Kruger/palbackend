@@ -84,135 +84,94 @@ router.get("/myBookings", auth, async (req, res) => {
 
 router.get("/exportToExcel", auth, async (req, res) => {
   try {
-    console.log("Start of /exportToExcel");
-    console.log("User:", req.user);
+    const populationOptions = {
+      path: "timeSlots.attendees._id",
+      model: "User",
+      select: "name email phone campus attendedPresentation children",
+      populate: {
+        path: 'children',
+        select: 'name testGrade ageGroup'
+      },
+    };
 
-    let presentations;
-
-    if (req.user.role === "superadmin") {
-      console.log("Fetching presentations for superadmin...");
-      presentations = await Presentation.find()
-        .populate({
-          path: "timeSlots.attendees._id",
-          model: "User",
-          select: "name email phone campus attendedPresentation children",
-          populate: {
-            path: "children",
-            model: "Child",
-          },
-        })
-        .lean();
-    } else if (req.user.role === "admin") {
-      console.log("Fetching presentations for admin...");
-      presentations = await Presentation.find()
-        .populate({
-          path: "timeSlots.attendees._id",
-          model: "User",
-          select: "name email phone campus attendedPresentation children",
-          match: { campus: req.user.campus },
-          populate: {
-            path: "children",
-            model: "Child",
-          },
-        })
-        .lean();
+    if (req.user.role !== "superadmin") {
+      populationOptions.match = { campus: req.user.campus };
     }
 
-    console.log("Fetched presentations:", presentations);
+    const presentations = await Presentation.find()
+      .populate(populationOptions)
+      .lean();
 
-    const dataToExport = [];
-    console.log("Transforming data for export...");
-
-    presentations.forEach((presentation) => {
-      presentation.timeSlots.forEach((slot) => {
-        slot.attendees.forEach((attendee) => {
-          if (attendee._id) {
-            const childrenNames = attendee._id.children
-              .map((child) => child.name)
-              .join("; ");
-            const childrenPreviousSchools = attendee._id.children
-              .map((child) => child.previousSchool)
-              .join("; ");
-            const childrenDateOfBirths = attendee._id.children
-              .map((child) => moment(child.dateOfBirth).format("DD-MM-YYYY"))
-              .join("; ");
-            const childrenGenders = attendee._id.children
-              .map((child) => child.gender)
-              .join("; ");
-            const childrenTestGrades = attendee._id.children
-              .map((child) => child.testGrade)
-              .join("; ");
-
-            dataToExport.push([
-              presentation.name,
-              slot.startTime,
-              slot.endTime,
-              attendee._id.name,
-              attendee._id.email,
-              attendee._id.phone,
-              attendee._id.campus,
-              attendee.bookedAt,
-
-              childrenNames,
-              childrenPreviousSchools,
-              childrenDateOfBirths,
-              childrenGenders,
-              childrenTestGrades,
-              attendee._id.attendedPresentation,
-            ]);
+    const allAttendeesInTimeSlots = presentations.flatMap((presentation) => {
+      return presentation.timeSlots.flatMap((slot) => {
+        return slot.attendees.flatMap((attendee) => {
+          if (!attendee._id) {
+            return [];
           }
+
+          const matchingChildren = attendee._id.children.filter(
+            (child) => child.ageGroup === presentation.ageGroup
+          );
+
+          return matchingChildren.map((child) => {
+            return {
+              _id: attendee._id._id,
+              name: attendee._id.name,
+              email: attendee._id.email,
+              phone: attendee._id.phone,
+              campus: attendee._id.campus,
+              bookedAt: attendee.bookedAt,
+              attendedPresentation: attendee._id.attendedPresentation,
+              childName: child.name,
+              childTestGrade: child.testGrade,
+              presentationName: presentation.name,
+              startTime: slot.startTime,
+              endTime: slot.endTime,
+            };
+          });
         });
       });
     });
 
-    console.log("Data ready for export:", dataToExport);
-
-    console.log("Generating CSV file...");
-
-    // Create a new workbook and add data to the first worksheet.
     const workbook = new exceljs.Workbook();
-    const worksheet = workbook.addWorksheet("Attendees Data");
+    const worksheet = workbook.addWorksheet('Attendees Data');
 
-    // Set headers
     worksheet.columns = [
-      { header: "Presentation Name", key: "name", width: 25 },
-      { header: "Start Time", key: "start", width: 15 },
-      { header: "End Time", key: "end", width: 15 },
-      { header: "Name", key: "attendeeName", width: 20 },
-      { header: "Email", key: "email", width: 25 },
-      { header: "Phone", key: "phone", width: 15 },
-      { header: "Campus", key: "campus", width: 15 },
-      { header: "Booked At", key: "booked", width: 15 },
-
-      { header: "Child Name", key: "childName", width: 20 },
-      {
-        header: "Child Previous School",
-        key: "childPreviousSchool",
-        width: 25,
-      },
-      { header: "Child Date Of Birth", key: "childDateOfBirth", width: 15 },
-      { header: "Child Gender", key: "childGender", width: 15 },
-      { header: "Child Test Grade", key: "childTestGrade", width: 20 },
-      { header: "Attended Presentation", key: "attended", width: 20 },
+      { header: 'Parent Name', key: 'name', width: 20 },
+      { header: 'Email', key: 'email', width: 25 },
+      { header: 'Phone Number', key: 'phone', width: 15 },
+      { header: 'Campus', key: 'campus', width: 15 },
+      { header: 'Child Name', key: 'childName', width: 20 },
+      { header: 'Child Test Grade', key: 'childTestGrade', width: 20 },
+      { header: 'Presentation Booked', key: 'presentationName', width: 25 },
+      { header: 'Booking Time', key: 'bookingTime', width: 20 },
+      { header: 'Booking Creation Time', key: 'bookedAt', width: 20 },
+      { header: 'Attended', key: 'attendedPresentation', width: 10 },
     ];
 
-    // Add rows
-    worksheet.addRows(dataToExport);
+    allAttendeesInTimeSlots.forEach((attendee) => {
+      const bookingTime = `${moment(attendee.startTime).format('HH:mm')} - ${moment(attendee.endTime).format('HH:mm')}`;
+      const bookedAt = moment(attendee.bookedAt).format('DD/MM/YYYY HH:mm:ss');
 
-    res.setHeader(
-      "Content-Disposition",
-      'attachment; filename="attendees_data.csv"'
-    );
-    res.type("text/csv");
+      worksheet.addRow({
+        ...attendee,
+        bookingTime,
+        bookedAt,
+        attendedPresentation: attendee.attendedPresentation ? 'Yes' : 'No',
+      });
+    });
 
-    // Write CSV to the response
-    await workbook.csv.write(res);
-    res.status(200).end();
-  } catch (error) {
-    console.error("Error exporting to CSV:", error);
-    res.status(500).send("Internal server error");
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename=attendees_data.xlsx');
+
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    console.error("Error processing request:", err);
+    res.status(500).json({ message: 'Internal Server Error' });
   }
 });
+
 
 router.get("/:id/attendeesInTimeSlots", async (req, res) => {
   try {
@@ -252,63 +211,41 @@ router.get("/:id/attendeesInTimeSlots", async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 });
-
 router.get("/allAttendeesInTimeSlots", auth, async (req, res) => {
   try {
-    let presentations;
-
     const populationOptions = {
       path: "timeSlots.attendees._id",
       model: "User",
       select: "name email phone campus attendedPresentation children",
+      populate: {
+        path: 'children',
+        select: 'name testGrade ageGroup'
+      },
     };
+    
 
-    if (req.user.role === "superadmin") {
-      presentations = await Presentation.find()
-        .populate(populationOptions)
-        .lean();
-    } else if (req.user.role === "admin") {
-      presentations = await Presentation.find()
-        .populate({
-          ...populationOptions,
-          match: { campus: req.user.campus },
-        })
-        .lean();
+    if (req.user.role !== "superadmin") {
+      populationOptions.match = { campus: req.user.campus };
     }
 
-    if (presentations) {
-      for (let presentation of presentations) {
-        for (let slot of presentation.timeSlots) {
-          for (let attendee of slot.attendees) {
-            if (attendee._id && attendee._id.children) {
-              await User.populate(attendee._id, {
-                path: "children",
-                select: "name testGrade gender ageGroup",
-                populate: {
-                  path: "ageGroup",
-                  select: "name",
-                },
-              });
+    const presentations = await Presentation.find()
+      .populate(populationOptions)
+      .lean();
+
+      const allAttendeesInTimeSlots = presentations.flatMap((presentation) => {
+        return presentation.timeSlots.flatMap((slot) => {
+          return slot.attendees.flatMap((attendee) => {
+            if (!attendee._id) {
+              return [];
             }
-          }
-        }
-      }
-    }
-
-    const allAttendeesInTimeSlots = presentations.map((presentation) => {
-      return {
-        presentationName: presentation.name,
-        timeSlots: presentation.timeSlots.map((slot) => ({
-          startTime: slot.startTime,
-          endTime: slot.endTime,
-          attendees: slot.attendees
-            .map((attendee) => {
-              if (!attendee._id) {
-                return null;
-              }
-              const filteredChildren = attendee._id.children.filter(
-                (child) => child.ageGroup && child.ageGroup.name === presentation.ageGroup
-              );
+      
+            // Filter children by the ageGroup of the presentation
+            const matchingChildren = attendee._id.children.filter(
+              (child) => child.ageGroup === presentation.ageGroup
+            );
+      
+            // Create a row for each matching child
+            return matchingChildren.map((child) => {
               return {
                 _id: attendee._id._id,
                 name: attendee._id.name,
@@ -317,20 +254,26 @@ router.get("/allAttendeesInTimeSlots", auth, async (req, res) => {
                 campus: attendee._id.campus,
                 bookedAt: attendee.bookedAt,
                 attendedPresentation: attendee._id.attendedPresentation,
-                children: filteredChildren,
+                childName: child.name,
+                childTestGrade: child.testGrade,
+                presentationName: presentation.name,
+                startTime: slot.startTime,
+                endTime: slot.endTime,
               };
-            })
-            .filter(Boolean),
-        })),
-      };
-    });
-
-    res.json(allAttendeesInTimeSlots);
+            });
+          });
+        });
+      });
+      
+      res.json(allAttendeesInTimeSlots);
+      
+      
   } catch (err) {
     console.error("Error processing request:", err);
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ message: 'Internal Server Error' });
   }
 });
+
 
 router.get("/presentations", async (req, res) => {
   try {
