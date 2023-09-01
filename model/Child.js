@@ -55,8 +55,8 @@ const ageGroupMapping = {
   "예비 초등 4학년": "Elementary",
   "예비 초등 5학년": "Elementary",
   "예비 초등 6학년": "Elementary",
-  "예비 중등 1학년": "Middle School",
-  "예비 중등 2학년": "Middle School",
+  "예비 중등 1학년": "Elementary",
+  "예비 중등 2학년": "Elementary",
 };
 
 ChildSchema.methods.updateChildFields = function () {
