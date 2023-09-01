@@ -314,6 +314,8 @@ router.patch("/:userId/attendedPresentation", async (req, res) => {
       .json({ error: "An error occurred while updating attendance." });
   }
 });
+
+
 // Generate Reset Token and Send SMS
 router.post('/forgot-password', async (req, res) => {
   const { phoneNumber } = req.body;
