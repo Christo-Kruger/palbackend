@@ -363,7 +363,7 @@ router.patch("/:presentationId/changeSlot", async (req, res) => {
     const startTimeNEW = moment.tz(newSlot.startTime, "HH:mm", "Asia/Seoul").format('HH:mm');
     const startTimeOLD = moment.tz(oldSlot.startTime, "HH:mm", "Asia/Seoul").format('HH:mm');
     const phoneNumber = user.phone;
-    const message = `설명회 예약 시간이 ${startTimeNEW} 에서 ${startTimeOLD} 으로 변경되었습니다.`;
+    const message = `설명회 예약 시간이 ${startTimeOLD}  에서 ${startTimeOLD} ${startTimeNEW}으로 변경되었습니다.`;
     await sendSMS(phoneNumber, message);
 
     return res.send({ success: "Successfully changed the slot" });
