@@ -90,7 +90,7 @@ router.get("/exportToExcel", auth, async (req, res) => {
       select: "name email phone campus attendedPresentation children",
       populate: {
         path: 'children',
-        select: 'name testGrade ageGroup'
+        select: 'name testGrade ageGroup gender previousSchool dateOfBirth'
       },
     };
 
@@ -120,10 +120,13 @@ router.get("/exportToExcel", auth, async (req, res) => {
               email: attendee._id.email,
               phone: attendee._id.phone,
               campus: attendee._id.campus,
-              bookedAt: attendee.bookedAt,
+              bookedAt: (new Date(attendee.bookedAt)).toLocaleString("en-US", {timeZone: "Asia/Seoul"}),
               attendedPresentation: attendee._id.attendedPresentation,
               childName: child.name,
               childTestGrade: child.testGrade,
+              dateOfBirth: child.dateOfBirth,
+              gender: child.gender,
+              previousSchool: child.previousSchool,
               presentationName: presentation.name,
               startTime: slot.startTime,
               endTime: slot.endTime,
@@ -143,6 +146,9 @@ router.get("/exportToExcel", auth, async (req, res) => {
       { header: 'Campus', key: 'campus', width: 15 },
       { header: 'Child Name', key: 'childName', width: 20 },
       { header: 'Child Test Grade', key: 'childTestGrade', width: 20 },
+      { header: 'Child Date of Birth', key: 'dateOfBirth', width: 20 },
+      { header: 'Gender', key: 'gender' ,width :3},
+      { header: 'Previous School', key: 'previousSchool', width: 20 },
       { header: 'Presentation Booked', key: 'presentationName', width: 25 },
       { header: 'Booking Time', key: 'bookingTime', width: 20 },
       { header: 'Booking Creation Time', key: 'bookedAt', width: 20 },
