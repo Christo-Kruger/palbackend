@@ -102,39 +102,53 @@ router.get("/exportToExcel", auth, async (req, res) => {
       .populate(populationOptions)
       .lean();
 
-    const allAttendeesInTimeSlots = presentations.flatMap((presentation) => {
-      return presentation.timeSlots.flatMap((slot) => {
-        return slot.attendees.flatMap((attendee) => {
-          if (!attendee._id) {
-            return [];
-          }
-
-          const matchingChildren = attendee._id.children.filter(
-            (child) => child.ageGroup === presentation.ageGroup
-          );
-
-          return matchingChildren.map((child) => {
-            return {
-              _id: attendee._id._id,
-              name: attendee._id.name,
-              email: attendee._id.email,
-              phone: attendee._id.phone,
-              campus: attendee._id.campus,
-              bookedAt: (new Date(attendee.bookedAt)).toLocaleString("en-US", {timeZone: "Asia/Seoul"}),
-              attendedPresentation: attendee._id.attendedPresentation,
-              childName: child.name,
-              childTestGrade: child.testGrade,
-              dateOfBirth: child.dateOfBirth,
-              gender: child.gender,
-              previousSchool: child.previousSchool,
-              presentationName: presentation.name,
-              startTime: slot.startTime,
-              endTime: slot.endTime,
-            };
+      const allAttendeesInTimeSlots = presentations.flatMap((presentation) => {
+        return presentation.timeSlots.flatMap((slot) => {
+          return slot.attendees.flatMap((attendee) => {
+            if (!attendee._id) {
+              return [];
+            }
+      
+            const matchingChildren = attendee._id.children.filter(
+              (child) => child.ageGroup === presentation.ageGroup
+            );
+      
+            return matchingChildren.map((child) => {
+              const startTimeInKorean = moment(slot.startTime).tz("Asia/Seoul").format('HH:mm');
+              const endTimeInKorean = moment(slot.endTime).tz("Asia/Seoul").format('HH:mm');
+              
+              return {
+                _id: attendee._id._id,
+                name: attendee._id.name,
+                email: attendee._id.email,
+                phone: attendee._id.phone,
+                campus: attendee._id.campus,
+                bookedAt: (new Date(attendee.bookedAt)).toLocaleString("en-US", {timeZone: "Asia/Seoul"}),
+                attendedPresentation: attendee._id.attendedPresentation,
+                childName: child.name,
+                childTestGrade: child.testGrade,
+                dateOfBirth: child.dateOfBirth,
+                gender: child.gender,
+                previousSchool: child.previousSchool,
+                presentationName: presentation.name,
+                startTime: startTimeInKorean, // Updated to use the Korean timezone
+                endTime: endTimeInKorean,    // Updated to use the Korean timezone
+              };
+            });
           });
         });
       });
-    });
+
+    const translateGenderToKorean = (gender) => {
+      switch (gender) {
+        case 'male':
+          return '남성';
+        case 'female':
+          return '여성';
+        default:
+          return gender; // Return the original gender if it doesn't match known values
+      }
+    }
 
     const workbook = new exceljs.Workbook();
     const worksheet = workbook.addWorksheet('Attendees Data');
@@ -147,7 +161,7 @@ router.get("/exportToExcel", auth, async (req, res) => {
       { header: 'Child Name', key: 'childName', width: 20 },
       { header: 'Child Test Grade', key: 'childTestGrade', width: 20 },
       { header: 'Child Date of Birth', key: 'dateOfBirth', width: 20 },
-      { header: 'Gender', key: 'gender' ,width :3},
+      { header: 'Gender', key: 'gender', width: 3 },
       { header: 'Previous School', key: 'previousSchool', width: 20 },
       { header: 'Presentation Booked', key: 'presentationName', width: 25 },
       { header: 'Booking Time', key: 'bookingTime', width: 20 },
@@ -156,11 +170,12 @@ router.get("/exportToExcel", auth, async (req, res) => {
     ];
 
     allAttendeesInTimeSlots.forEach((attendee) => {
-      const bookingTime = `${moment(attendee.startTime).format('HH:mm')} - ${moment(attendee.endTime).format('HH:mm')}`;
+      const bookingTime = `${moment(attendee.startTime, "HH:mm").tz("Asia/Seoul").format('HH:mm')} - ${moment(attendee.endTime, "HH:mm").tz("Asia/Seoul").format('HH:mm')}`;
       const bookedAt = moment(attendee.bookedAt).format('DD/MM/YYYY HH:mm:ss');
 
       worksheet.addRow({
         ...attendee,
+        gender: translateGenderToKorean(attendee.gender), // Translate the gender to Korean
         bookingTime,
         bookedAt,
         attendedPresentation: attendee.attendedPresentation ? 'Yes' : 'No',
