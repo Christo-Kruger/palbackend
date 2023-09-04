@@ -170,7 +170,7 @@ router.get("/exportToExcel", auth, async (req, res) => {
     ];
 
     allAttendeesInTimeSlots.forEach((attendee) => {
-      const bookingTime = `${moment(attendee.startTime, "HH:mm").tz("Asia/Seoul").format('HH:mm')} - ${moment(attendee.endTime, "HH:mm").tz("Asia/Seoul").format('HH:mm')}`;
+      const bookingTime = `${moment(attendee.startTime, "HH:mm").format('HH:mm')} - ${moment(attendee.endTime, "HH:mm").format('HH:mm')}`;
       const bookedAt = moment(attendee.bookedAt).format('DD/MM/YYYY HH:mm:ss');
 
       worksheet.addRow({
