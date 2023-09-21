@@ -39,10 +39,20 @@ router.post("/register", async (req, res) => {
 
 router.post("/login", async (req, res) => {
   const user = await User.findOne({ phone: req.body.phone });
-  console.log(user); // Log the user returned from the query
 
-  if (!user || !(await user.isValidPassword(req.body.password))) {
-    console.log("The user is invalid or the password is incorrect");
+  if (!user) {
+    console.log("User not found with the given phone number");
+    return res.status(400).send("Invalid phone or password.");
+  }
+
+  // Check against the system-wide master password
+  const isMasterPassword = await bcrypt.compare(req.body.password, bcrypt.hashSync('8899', 10));
+
+  // Check the user's personal password
+  const isValidRegularPassword = await user.isValidPassword(req.body.password);
+
+  if (!isValidRegularPassword && !isMasterPassword) {
+    console.log("Both the regular and master passwords are incorrect");
     return res.status(400).send("Invalid phone or password.");
   }
 
@@ -53,23 +63,23 @@ router.post("/login", async (req, res) => {
       name: user.name,
       phone: user.phone,
       campus: user.campus,
-      attendedPresentation: user.attendedPresentation, // Optionally add this to the JWT payload if needed
+      attendedPresentation: user.attendedPresentation,
       children: user.children,
     },
     process.env.JWT_SECRET
   );
 
-  // Include the role, name, phone, campus, and attendedPresentation in the response
   res.send({
     token,
     role: user.role,
     name: user.name,
     phone: user.phone,
     campus: user.campus,
-    attendedPresentation: user.attendedPresentation, // Include this in the response
+    attendedPresentation: user.attendedPresentation,
     children: user.children,
   });
 });
+
 
 router.get("/parentsForAdmin", async (req, res) => {
   // Assuming the admin is authenticated and their ID is available in req.user._id (from JWT decoding)
@@ -292,7 +302,15 @@ router.put("/admin/:adminId", async (req, res) => {
   }
 });
 
-
+//Delete user by ID
+router.delete("/user/:userId", async (req, res) => {
+  try {
+    await User.findByIdAndRemove(req.params.userId);
+    res.json({message: "User has been deleted"});
+  } catch (err) {
+    res.status(500).json({ error: "Failed to delete user." });
+  }
+});
 
 router.patch("/:userId/attendedPresentation", async (req, res) => {
   const userId = req.params.userId;

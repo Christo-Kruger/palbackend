@@ -139,6 +139,10 @@ router.get("/exportToExcel", auth, async (req, res) => {
         });
       });
 
+      allAttendeesInTimeSlots.sort((a, b) => {
+        return new Date(b.bookedAt) - new Date(a.bookedAt);
+      });
+
     const translateGenderToKorean = (gender) => {
       switch (gender) {
         case 'male':
