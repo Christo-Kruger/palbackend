@@ -6,6 +6,11 @@ const ChildSchema = new mongoose.Schema({
   dateOfBirth: { type: Date, required: true },
   ageGroup: { type: String },
   gender: { type: String, enum: ["male", "female"] },
+  group: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Group',
+    default: null
+  },
   testGrade: {
     type: String,
     enum: [
@@ -16,7 +21,7 @@ const ChildSchema = new mongoose.Schema({
       "예비 초등 1학년",
       "예비 초등 2학년",
       "예비 초등 3학년",
-      "예비 초등 4학년",
+      "예비 초등 4학년", 
       "예비 초등 5학년",
       "예비 초등 6학년",
       "예비 중등 1학년",

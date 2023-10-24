@@ -15,6 +15,7 @@ const UserSchema = new mongoose.Schema({
   resetToken: { type: String },
   resetTokenExpires: { type: Date },
   qrCodeDataURL: { type: Buffer },
+  bookedAt: { type: Date },
 });
 
 UserSchema.pre("save", async function (next) {

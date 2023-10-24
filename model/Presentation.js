@@ -21,7 +21,6 @@ const PresentationSchema = new mongoose.Schema({
   date: { type: Date, required: true },
   campus: { type: String, enum: ['전체', '동탄'], required: true },
   ageGroup: { type: String, required: true }, // New field
-  
   timeSlots: [TimeSlotSchema],
   
  

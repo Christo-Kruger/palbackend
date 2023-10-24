@@ -40,21 +40,31 @@ router.use((req, res, next) => {
 router.get("/", async (req, res) => {
   try {
     const userCampus = req.query.campus;
-    let presentations;
+    const childAgeGroup = req.query.ageGroup; // Assuming you can get the child's ageGroup from query
+    // or you could use something like const childAgeGroup = await getChildAgeGroup(userId); if you have a function to get it.
+    
+    let queryObj = { ageGroup: childAgeGroup };
+
     if (userCampus === "동탄") {
-      presentations = await Presentation.find({
-        campus: { $in: ["전체", "동탄"] },
-      }).lean();
+      queryObj.campus = { $in: ["전체", "동탄"] };
     } else if (["수지", "분당"].includes(userCampus)) {
-      presentations = await Presentation.find({ campus: "전체" }).lean();
+      queryObj.campus = "전체";
     } else {
       return res.status(400).json({ message: "Invalid campus" });
     }
+
+    const presentations = await Presentation.find(queryObj).lean();
+
+    if (presentations.length === 0) {
+      return res.status(404).json({ message: "No matching presentations found" });
+    }
+    
     res.json(presentations);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
+
 
 router.get("/myBookings", auth, async (req, res) => {
   try {
@@ -89,8 +99,8 @@ router.get("/exportToExcel", auth, async (req, res) => {
       model: "User",
       select: "name email phone campus attendedPresentation children",
       populate: {
-        path: 'children',
-        select: 'name testGrade ageGroup gender previousSchool dateOfBirth'
+        path: "children",
+        select: "name testGrade ageGroup gender previousSchool dateOfBirth",
       },
     };
 
@@ -102,101 +112,114 @@ router.get("/exportToExcel", auth, async (req, res) => {
       .populate(populationOptions)
       .lean();
 
-      const allAttendeesInTimeSlots = presentations.flatMap((presentation) => {
-        return presentation.timeSlots.flatMap((slot) => {
-          return slot.attendees.flatMap((attendee) => {
-            if (!attendee._id) {
-              return [];
-            }
-      
-            const matchingChildren = attendee._id.children.filter(
-              (child) => child.ageGroup === presentation.ageGroup
-            );
-      
-            return matchingChildren.map((child) => {
-              const startTimeInKorean = moment(slot.startTime).tz("Asia/Seoul").format('HH:mm');
-              const endTimeInKorean = moment(slot.endTime).tz("Asia/Seoul").format('HH:mm');
-              
-              return {
-                _id: attendee._id._id,
-                name: attendee._id.name,
-                email: attendee._id.email,
-                phone: attendee._id.phone,
-                campus: attendee._id.campus,
-                bookedAt: (new Date(attendee.bookedAt)).toLocaleString("en-US", {timeZone: "Asia/Seoul"}),
-                attendedPresentation: attendee._id.attendedPresentation,
-                childName: child.name,
-                childTestGrade: child.testGrade,
-                dateOfBirth: child.dateOfBirth,
-                gender: child.gender,
-                previousSchool: child.previousSchool,
-                presentationName: presentation.name,
-                startTime: startTimeInKorean, // Updated to use the Korean timezone
-                endTime: endTimeInKorean,    // Updated to use the Korean timezone
-              };
-            });
+    const allAttendeesInTimeSlots = presentations.flatMap((presentation) => {
+      return presentation.timeSlots.flatMap((slot) => {
+        return slot.attendees.flatMap((attendee) => {
+          if (!attendee._id) {
+            return [];
+          }
+
+          const matchingChildren = attendee._id.children.filter(
+            (child) => child.ageGroup === presentation.ageGroup
+          );
+
+          return matchingChildren.map((child) => {
+            const startTimeInKorean = moment(slot.startTime)
+              .tz("Asia/Seoul")
+              .format("HH:mm");
+            const endTimeInKorean = moment(slot.endTime)
+              .tz("Asia/Seoul")
+              .format("HH:mm");
+
+            return {
+              _id: attendee._id._id,
+              name: attendee._id.name,
+              email: attendee._id.email,
+              phone: attendee._id.phone,
+              campus: attendee._id.campus,
+              bookedAt: new Date(attendee.bookedAt).toLocaleString("en-US", {
+                timeZone: "Asia/Seoul",
+              }),
+              attendedPresentation: attendee._id.attendedPresentation,
+              childName: child.name,
+              childTestGrade: child.testGrade,
+              dateOfBirth: child.dateOfBirth,
+              gender: child.gender,
+              previousSchool: child.previousSchool,
+              presentationName: presentation.name,
+              startTime: startTimeInKorean, // Updated to use the Korean timezone
+              endTime: endTimeInKorean, // Updated to use the Korean timezone
+            };
           });
         });
       });
+    });
 
-      allAttendeesInTimeSlots.sort((a, b) => {
-        return new Date(b.bookedAt) - new Date(a.bookedAt);
-      });
+    allAttendeesInTimeSlots.sort((a, b) => {
+      return new Date(b.bookedAt) - new Date(a.bookedAt);
+    });
 
     const translateGenderToKorean = (gender) => {
       switch (gender) {
-        case 'male':
-          return '남성';
-        case 'female':
-          return '여성';
+        case "male":
+          return "남성";
+        case "female":
+          return "여성";
         default:
           return gender; // Return the original gender if it doesn't match known values
       }
-    }
+    };
 
     const workbook = new exceljs.Workbook();
-    const worksheet = workbook.addWorksheet('Attendees Data');
+    const worksheet = workbook.addWorksheet("Attendees Data");
 
     worksheet.columns = [
-      { header: 'Parent Name', key: 'name', width: 20 },
-      { header: 'Email', key: 'email', width: 25 },
-      { header: 'Phone Number', key: 'phone', width: 15 },
-      { header: 'Campus', key: 'campus', width: 15 },
-      { header: 'Child Name', key: 'childName', width: 20 },
-      { header: 'Child Test Grade', key: 'childTestGrade', width: 20 },
-      { header: 'Child Date of Birth', key: 'dateOfBirth', width: 20 },
-      { header: 'Gender', key: 'gender', width: 3 },
-      { header: 'Previous School', key: 'previousSchool', width: 20 },
-      { header: 'Presentation Booked', key: 'presentationName', width: 25 },
-      { header: 'Booking Time', key: 'bookingTime', width: 20 },
-      { header: 'Booking Creation Time', key: 'bookedAt', width: 20 },
-      { header: 'Attended', key: 'attendedPresentation', width: 10 },
+      { header: "Parent Name", key: "name", width: 20 },
+      { header: "Email", key: "email", width: 25 },
+      { header: "Phone Number", key: "phone", width: 15 },
+      { header: "Campus", key: "campus", width: 15 },
+      { header: "Child Name", key: "childName", width: 20 },
+      { header: "Child Test Grade", key: "childTestGrade", width: 20 },
+      { header: "Child Date of Birth", key: "dateOfBirth", width: 20 },
+      { header: "Gender", key: "gender", width: 3 },
+      { header: "Previous School", key: "previousSchool", width: 20 },
+      { header: "Presentation Booked", key: "presentationName", width: 25 },
+      { header: "Booking Time", key: "bookingTime", width: 20 },
+      { header: "Booking Creation Time", key: "bookedAt", width: 20 },
+      { header: "Attended", key: "attendedPresentation", width: 10 },
     ];
 
     allAttendeesInTimeSlots.forEach((attendee) => {
-      const bookingTime = `${moment(attendee.startTime, "HH:mm").format('HH:mm')} - ${moment(attendee.endTime, "HH:mm").format('HH:mm')}`;
-      const bookedAt = moment(attendee.bookedAt).format('DD/MM/YYYY HH:mm:ss');
+      const bookingTime = `${moment(attendee.startTime, "HH:mm").format(
+        "HH:mm"
+      )} - ${moment(attendee.endTime, "HH:mm").format("HH:mm")}`;
+      const bookedAt = moment(attendee.bookedAt).format("MM/DD/YYYY HH:mm:ss");
 
       worksheet.addRow({
         ...attendee,
         gender: translateGenderToKorean(attendee.gender), // Translate the gender to Korean
         bookingTime,
         bookedAt,
-        attendedPresentation: attendee.attendedPresentation ? 'Yes' : 'No',
+        attendedPresentation: attendee.attendedPresentation ? "Yes" : "No",
       });
     });
 
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', 'attachment; filename=attendees_data.xlsx');
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader(
+      "Content-Disposition",
+      "attachment; filename=attendees_data.xlsx"
+    );
 
     await workbook.xlsx.write(res);
     res.end();
   } catch (err) {
     console.error("Error processing request:", err);
-    res.status(500).json({ message: 'Internal Server Error' });
+    res.status(500).json({ message: "Internal Server Error" });
   }
 });
-
 
 router.get("/:id/attendeesInTimeSlots", async (req, res) => {
   try {
@@ -243,11 +266,10 @@ router.get("/allAttendeesInTimeSlots", auth, async (req, res) => {
       model: "User",
       select: "name email phone campus attendedPresentation children",
       populate: {
-        path: 'children',
-        select: 'name testGrade ageGroup gender dateOfBirth previousSchool'
+        path: "children",
+        select: "name testGrade ageGroup gender dateOfBirth previousSchool",
       },
     };
-    
 
     if (req.user.role !== "superadmin") {
       populationOptions.match = { campus: req.user.campus };
@@ -257,51 +279,48 @@ router.get("/allAttendeesInTimeSlots", auth, async (req, res) => {
       .populate(populationOptions)
       .lean();
 
-      const allAttendeesInTimeSlots = presentations.flatMap((presentation) => {
-        return presentation.timeSlots.flatMap((slot) => {
-          return slot.attendees.flatMap((attendee) => {
-            if (!attendee._id) {
-              return [];
-            }
-      
-            // Filter children by the ageGroup of the presentation
-            const matchingChildren = attendee._id.children.filter(
-              (child) => child.ageGroup === presentation.ageGroup
-            );
-      
-            // Create a row for each matching child
-            return matchingChildren.map((child) => {
-              return {
-                _id: attendee._id._id,
-                name: attendee._id.name,
-                email: attendee._id.email,
-                phone: attendee._id.phone,
-                campus: attendee._id.campus,
-                bookedAt: attendee.bookedAt,
-                attendedPresentation: attendee._id.attendedPresentation,
-                childName: child.name,
-                dateOfBirth: child.dateOfBirth,
-                previousSchool: child.previousSchool,
-                childGender: child.gender,
-                childTestGrade: child.testGrade,
-                presentationName: presentation.name,
-                startTime: slot.startTime,
-                endTime: slot.endTime,
-              };
-            });
+    const allAttendeesInTimeSlots = presentations.flatMap((presentation) => {
+      return presentation.timeSlots.flatMap((slot) => {
+        return slot.attendees.flatMap((attendee) => {
+          if (!attendee._id) {
+            return [];
+          }
+
+          // Filter children by the ageGroup of the presentation
+          const matchingChildren = attendee._id.children.filter(
+            (child) => child.ageGroup === presentation.ageGroup
+          );
+
+          // Create a row for each matching child
+          return matchingChildren.map((child) => {
+            return {
+              _id: attendee._id._id,
+              name: attendee._id.name,
+              email: attendee._id.email,
+              phone: attendee._id.phone,
+              campus: attendee._id.campus,
+              bookedAt: attendee.bookedAt,
+              attendedPresentation: attendee._id.attendedPresentation,
+              childName: child.name,
+              dateOfBirth: child.dateOfBirth,
+              previousSchool: child.previousSchool,
+              childGender: child.gender,
+              childTestGrade: child.testGrade,
+              presentationName: presentation.name,
+              startTime: slot.startTime,
+              endTime: slot.endTime,
+            };
           });
         });
       });
-      
-      res.json(allAttendeesInTimeSlots);
-      
-      
+    });
+
+    res.json(allAttendeesInTimeSlots);
   } catch (err) {
     console.error("Error processing request:", err);
-    res.status(500).json({ message: 'Internal Server Error' });
+    res.status(500).json({ message: "Internal Server Error" });
   }
 });
-
 
 router.get("/presentations", async (req, res) => {
   try {
@@ -341,7 +360,6 @@ router.patch("/:presentationId/changeSlot", async (req, res) => {
     if (!presentation) {
       return res.status(404).send({ error: "Presentation not found" });
     }
-
 
     const oldSlot = presentation.timeSlots.id(oldSlotId);
     if (!oldSlot) {
@@ -388,8 +406,12 @@ router.patch("/:presentationId/changeSlot", async (req, res) => {
     if (!user) {
       return res.status(404).send({ error: "User not found" });
     }
-    const startTimeNEW = moment.tz(newSlot.startTime, "HH:mm", "Asia/Seoul").format('HH:mm');
-    const startTimeOLD = moment.tz(oldSlot.startTime, "HH:mm", "Asia/Seoul").format('HH:mm');
+    const startTimeNEW = moment
+      .tz(newSlot.startTime, "HH:mm", "Asia/Seoul")
+      .format("HH:mm");
+    const startTimeOLD = moment
+      .tz(oldSlot.startTime, "HH:mm", "Asia/Seoul")
+      .format("HH:mm");
     const phoneNumber = user.phone;
     const message = `설명회 예약 시간이 ${startTimeOLD}  에서  ${startTimeNEW}으로 변경되었습니다.`;
     await sendSMS(phoneNumber, message);
@@ -585,17 +607,20 @@ router.patch("/:id/slots/:slotId/attendees", auth, async (req, res) => {
     const childrenInAgeGroup = user.children.filter((child) => {
       return child.ageGroup === presentation.ageGroup;
     });
-    
+
     if (!childrenInAgeGroup.length) {
       return res.status(400).json({
         message:
           "해당 연령의 학생이 확인되지 않습니다. [등록학생정보]에서 생년월일을 확인해주시기 바랍니다.",
       });
     }
-    
-    const childrenNames = childrenInAgeGroup.map(child => child.name).join(', ');
-    const childrenTestGrades = childrenInAgeGroup.map(child => child.testGrade).join(', ');
 
+    const childrenNames = childrenInAgeGroup
+      .map((child) => child.name)
+      .join(", ");
+    const childrenTestGrades = childrenInAgeGroup
+      .map((child) => child.testGrade)
+      .join(", ");
 
     // Check if the user has already booked a presentation in the same age group
     const allPresentations = await Presentation.find({
@@ -641,9 +666,10 @@ router.patch("/:id/slots/:slotId/attendees", auth, async (req, res) => {
 
     user.qrCodeDataURL = qrCodeBinaryData;
     await user.save({ session });
-    
-    
-    const startTimeKST = moment.tz(timeSlot.startTime, "HH:mm", "Asia/Seoul").format('HH:mm');
+
+    const startTimeKST = moment
+      .tz(timeSlot.startTime, "HH:mm", "Asia/Seoul")
+      .format("HH:mm");
 
     // Send the booking confirmation SMS
     const message = `안녕하세요.제이리어학원입니다.

@@ -9,160 +9,255 @@ const requireAdmin = require("../middleware/requireAdmin");
 const Child = require("../model/Child");
 const BookingPriority = require("../model/BookingPriority");
 const mongoose = require("mongoose");
-
-
-
-
+const Group = require("../model/Group");
+const QRCode = require("qrcode");
 
 router.post("/", auth, async (req, res) => {
-  const { testSlotId, childId } = req.body;
   try {
-    const parent = await User.findById(req.user._id); // Parent is extracted from the token
-
-        // Check if the child has already been booked for any test slot
-        const existingBooking = await Booking.findOne({ child: childId });
-        if (existingBooking) {
-          return res.status(400).send("Child is already booked for a test slot.");
-        }
-
-    const priority = await BookingPriority.findOne();
-    const currentTime = new Date();
-
-    // Logging the priority details
-    console.log("Priority Start:", priority.priorityStart);
-    console.log("Priority End:", priority.priorityEnd);
-    console.log("Current Time:", currentTime);
-
-    if (currentTime < priority.priorityStart || (currentTime >= priority.priorityStart && currentTime <= priority.priorityEnd)) {
-      if (!parent.attendedPresentation) {
-        return res
-          .status(403)
-          .send(
-            "Only parents who attended the presentation can book at this time."
-          );
-      }
-    }
-
-    // Validate that the child belongs to the parent
-    console.log("Parent's Children:", parent.children);
-    console.log("Requested Child ID:", childId);
-    if (!parent.children.includes(childId)) {
-      return res.status(403).send("Invalid child.");
-    }
-
-    // Find the child
-    const child = await Child.findById(childId);
-    if (!child) {
-      return res.status(404).send("Child not found.");
-    }
-
-    const testSlot = await TestSlot.findById(testSlotId);
-    console.log("Test Slot Capacity:", testSlot.capacity);
-    console.log("Number of Bookings:", testSlot.bookings.length);
-
-    if (testSlot.capacity <= testSlot.bookings.length) {
-      return res.status(403).send("This test slot is fully booked.");
-    }
-
-    const booking = new Booking({
-      child: childId,
-      parent: req.user._id,
-      testSlot: testSlotId,
-      price: req.body.price, // assuming that the price comes in the request body
-    });
-
-    await booking.save();
-
-    // Update testSlot's bookings
-    testSlot.bookings.push(booking._id);
-    await testSlot.save();
-
-    // Send SMS
-    const message = `You have successfully booked a test for:
-    *${child.name} 
-    *${testSlot.campus} campus 
-    *${new Date(testSlot.date).toLocaleDateString()}
-    *${testSlot.startTime}.
-    
-    Please arrive 10 minutes before the scheduled time.`;
-
-    try {
-      await smsService.sendSMS(parent.phone, message);
-    } catch (smsError) {
-      console.log("SMS sending failed:", smsError);
-      // You can decide what to do when SMS sending fails
-    }
-
-    res.status(201).send(booking);
-
+    await handleBookingRequest(req, res);
   } catch (error) {
-    console.log("Booking error:", error);
+    console.error("Booking error:", error);
     res.status(500).send("Error processing the booking.");
   }
 });
 
-// Update confirmed payment if admin
-router.patch("/payment/:id",  async (req, res) => {
-  console.log("Received request to update booking:", req.params.id);
-  try {
-    const booking = await Booking.findById(req.params.id);
-    console.log("Found booking:", booking);
-    if (!booking) {
-      return res.status(404).send("Booking not found.");
-    }
-    booking.paid = true;
-    await booking.save();
-    console.log("Updated booking:", booking);
-    res.send(booking);
-  } catch (error) {
-    console.log("Error updating booking:", error);
-    res.status(500).send("Error updating the booking.");
-  }
-});
+const handleBookingRequest = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
 
-router.get('/child/:childId', async (req, res) => {
+  try {
+    const { testSlotId, timeSlotId, childId } = req.body;
+    const parent = await User.findById(req.user._id);
+    if (!parent) throw new Error("Parent not found");
+
+    const existingBooking = await Booking.findOne({ child: childId });
+    if (existingBooking) {
+      throw new Error("Child is already booked for a test slot.");
+    }
+
+    await checkBookingPriority(parent);
+    validateChildBelongsToParent(childId, parent.children);
+
+    const child = await Child.findById(childId);
+    if (!child) throw new Error("Child not found.");
+
+    const group = await Group.findById(child.group);
+    if (!group) throw new Error("Group not found.");
+
+    const currentTime = new Date();
+    const withinGroupDate =
+      currentTime >= new Date(group.startDate) &&
+      currentTime <= new Date(group.endDate);
+
+    if (!withinGroupDate || !group.canBook) {
+      await checkBookingPriority(parent);
+    }
+
+    const testSlot = await TestSlot.findOne({
+      _id: testSlotId,
+      "timeSlots._id": timeSlotId,
+    }).session(session);
+
+    if (!testSlot) {
+      throw new Error("Test Slot not found.");
+    }
+
+    const timeSlot = testSlot.timeSlots.id(timeSlotId);
+    if (
+      !timeSlot ||
+      timeSlot.status === "Fully Booked" ||
+      timeSlot.bookings.length >= timeSlot.capacity
+    ) {
+      throw new Error("Time Slot is fully booked or not found.");
+    }
+
+    const bookingDetails = {
+      childName: child.name,
+      parentName: parent.name,
+      testSlot: testSlotId,
+      timeSlot: timeSlotId,
+    };
+
+    const qrCodeDataURL = await QRCode.toDataURL(
+      JSON.stringify(bookingDetails)
+    );
+
+    const newBooking = new Booking({
+      child: childId,
+      parent: parent._id, // Add this line
+      testSlot: testSlotId,
+      timeSlot: timeSlotId,
+      qrCodeDataURL: Buffer.from(qrCodeDataURL),
+    });
+
+    await newBooking.save({ session });
+
+    timeSlot.bookings.push(newBooking._id);
+    if (timeSlot.bookings.length >= timeSlot.capacity) {
+      timeSlot.status = "Fully Booked";
+    }
+    await testSlot.save({ session });
+
+    const smsSuccess = await sendBookingConfirmationSMS(
+      parent,
+      child,
+      testSlot,
+      timeSlot.startTime
+    );
+
+    await session.commitTransaction();
+    session.endSession();
+
+    res.status(201).send({ booking: newBooking, smsSent: smsSuccess });
+  } catch (error) {
+    await session.abortTransaction();
+    session.endSession();
+    console.error("Booking error:", error);
+    res.status(500).send(error.message || "Error processing the booking.");
+  }
+};
+
+const checkBookingPriority = async (parent) => {
+  const priority = await BookingPriority.findOne();
+  const currentTime = new Date();
+
+  if (
+    currentTime < priority.priorityStart ||
+    currentTime <= priority.priorityEnd
+  ) {
+    if (!parent.attendedPresentation) {
+      throw {
+        status: 403,
+        message:
+          "Only parents who attended the presentation can book at this time.",
+      };
+    }
+  }
+};
+
+const validateChildBelongsToParent = (childId, parentChildren) => {
+  if (!parentChildren.includes(childId)) {
+    throw {
+      status: 403,
+      message: "Invalid child.",
+    };
+  }
+};
+
+const sendBookingConfirmationSMS = async (
+  parent,
+  child,
+  testSlot,
+  startTime
+) => {
+  const message = `테스트 예약이 성공적으로 완료되었습니다:
+  * ${child.name}
+  * ${testSlot.campus} 캠퍼스 
+  * ${new Date(testSlot.date).toLocaleDateString()}
+  * ${startTime}.
+  
+  예약 시간 10분 전에 도착해 주세요.`;
+
+  try {
+    await smsService.sendSMS(parent.phone, message);
+    return true;
+  } catch (smsError) {
+    console.error("SMS sending failed:", smsError);
+    return false;
+  }
+};
+
+router.get("/child/:childId", async (req, res) => {
   try {
     const bookings = await Booking.find({ childId: req.params.childId });
     if (bookings.length > 0) {
       res.json(bookings);
     } else {
-      res.status(404).json({ message: 'No bookings found for this child.' });
+      res
+        .status(200)
+        .json({ message: "No bookings found for this child.", bookings: [] });
     }
   } catch (error) {
-    res.status(500).json({ message: 'Server error.' });
+    res.status(500).json({ message: "Server error." });
   }
 });
+
 router.get("/", async (req, res) => {
   try {
-    const bookings = await Booking.find()
+    let bookings = await Booking.find()
+      .populate({
+        path: "testSlot",
+        populate: {
+          path: "timeSlots",
+        },
+      })
       .populate("child")
-      .populate("parent")
-      .populate("testSlot");
-     
+      .populate("parent");
+
+    // Filtering the timeSlots based on the booking
+    bookings = bookings.map((booking) => {
+      if (booking.testSlot && booking.testSlot.timeSlots) {
+        booking.testSlot.timeSlots = booking.testSlot.timeSlots.filter(
+          (timeSlot) => timeSlot.bookings.includes(booking._id)
+        );
+      }
+      return booking;
+    });
+
     res.json(bookings);
-  
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
 
-
-router.get("/parent",auth, async (req, res) => {
+router.get("/parent", auth, async (req, res) => {
   try {
-    const userId = req.query.userId; // Extract userId from the query parameter
-    
-    // Validate if the userId matches the authenticated user's ID (this is an extra layer of security)
+    const userId = req.query.userId;
     if (userId !== req.user._id.toString()) {
       return res.status(403).send("Forbidden: Mismatched user ID");
     }
-    
-    // Fetch bookings specifically for this user
     const bookings = await Booking.find({ parent: userId })
       .populate("child")
       .populate("parent")
       .populate("testSlot");
-    
-    res.json(bookings);
+
+    if (bookings.length === 0) {
+      return res.json([]); // Return an empty array if no bookings are found
+    }
+
+    // Post-process to include only the relevant timeSlots and convert Buffer to base64
+    const processedBookings = bookings.map((booking) => {
+      let relevantTimeSlot = null;
+
+      if (booking.testSlot && Array.isArray(booking.testSlot.timeSlots)) {
+        relevantTimeSlot = booking.testSlot.timeSlots.find(
+          (timeSlot) =>
+            Array.isArray(timeSlot.bookings) &&
+            timeSlot.bookings.some(
+              (bookingId) => bookingId.toString() === booking._id.toString()
+            )
+        );
+      }
+
+      // If qrCodeDataURL exists, convert it to base64
+      let qrCodeBase64 = null;
+      if (booking.qrCodeDataURL) {
+        qrCodeBase64 = booking.qrCodeDataURL.toString("base64");
+      }
+
+      return {
+        ...booking._doc,
+        testSlot: {
+          ...booking.testSlot?._doc,
+          timeSlots: relevantTimeSlot ? [relevantTimeSlot] : [],
+        },
+        qrCodeDataURL: qrCodeBase64,
+      };
+    });
+
+    // Log the processed bookings to the console
+
+    res.json(processedBookings);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -225,18 +320,18 @@ router.get("/admin", auth, async (req, res) => {
 
     // Fetch test slots with populated bookings count
     const testSlots = await TestSlot.find(query)
-    
+
       .populate({
-        path: 'bookings',
-        select: '_id'  // Only fetch the _id, since we're only interested in the count
+        path: "bookings",
+        select: "_id", // Only fetch the _id, since we're only interested in the count
       })
       .limit(limit * 1)
       .skip((page - 1) * limit)
-      .lean()  // Convert the mongoose document to a plain JS object
+      .lean() // Convert the mongoose document to a plain JS object
       .exec();
 
     // Replace bookings array with its length for each slot
-    testSlots.forEach(slot => {
+    testSlots.forEach((slot) => {
       slot.bookings = slot.bookings.length;
     });
 
@@ -253,65 +348,126 @@ router.get("/admin", auth, async (req, res) => {
       totalPages: Math.ceil(count / limit),
       currentPage: page,
     });
-
   } catch (error) {
     console.log("Error fetching test slots:", error);
     res.status(500).send("Error fetching the test slots.");
   }
 });
+//UPDATE TEST BOOKING (Parent)
+router.patch("/:bookingId", auth, async (req, res) => {
+  if (!req.body || !req.body.timeSlotId) {
+    return res.status(400).json({ error: "Missing required fields" });
+  }
 
-router.patch("/:id", auth, async (req, res) => {
+  if (!req.body.user) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
   try {
-    const bookingId = req.params.id;
-    const booking = await Booking.findById(bookingId);
+    const { testSlotId, timeSlotId } = req.body;
+    let oldTimeSlot = req.body.oldTimeSlot;
+    const parent = await User.findById(req.body.user);
+    const bookingId = req.params.bookingId;
 
-    if (!booking) {
-      return res.status(404).send("Booking not found.");
+    const existingBooking = await Booking.findById(bookingId).populate("child");
+
+    if (!existingBooking) {
+      throw new Error("Booking not found.");
     }
 
-    if (booking.parent._id.toString() !== req.user._id) {
-      return res
-        .status(403)
-        .send("You are not authorized to update this booking.");
+    const child = existingBooking.child;
+    const oldTestSlotId = existingBooking.testSlot._id;
+    let oldTimeSlotId = new mongoose.Types.ObjectId(oldTimeSlot);
+
+    console.log("Old Test Slot ID...:", oldTestSlotId); // Debug line
+    console.log("Old Time Slot ID:", oldTimeSlotId); // Debug line
+    console.log("Booking ID", bookingId);
+
+    const oldTestSlot = await TestSlot.findById(oldTestSlotId).session(session);
+
+    console.log("Old Test Slot:", oldTestSlot); // Debug line
+
+    if (oldTestSlot) {
+      oldTimeSlot = oldTestSlot.timeSlots.id(oldTimeSlotId);
+      console.log("Old Time Slot:", oldTimeSlot); // Debug line
     }
 
-    const bookingDate = new Date(req.body.date);
-    const bookingTime = req.body.time.split(":").map(Number);
-    bookingDate.setHours(bookingTime[0], bookingTime[1]);
-
-    // Validate booking time
-    const bookingHour = bookingDate.getHours();
-    if (bookingHour < 14 || bookingHour > 22) {
-      return res
-        .status(400)
-        .send("Booking can only be made between 2:30pm and 10pm.");
+    if (!oldTimeSlot) {
+      throw new Error("Old Time Slot not found.");
     }
 
-    // Validate campus
-    const validCampuses = ["Suji", "Dongtan", "Bundang"];
-    if (!validCampuses.includes(req.body.campus)) {
-      return res.status(400).send("Invalid campus.");
+    oldTimeSlot.bookings = oldTimeSlot.bookings.filter(
+      (booking) => !booking.equals(existingBooking._id)
+    );
+
+    if (!existingBooking.parent._id.equals(parent._id)) {
+      throw new Error("You do not have permission to update this booking.");
     }
 
-    booking.child.name = req.body.child.name;
-    booking.child.previousSchool = req.body.child.previousSchool;
-    booking.child.age = req.body.child.age;
-    booking.campus = req.body.campus;
-    booking.date = bookingDate;
-    booking.time = req.body.time;
+    let newTestSlot = null;
 
-    await booking.save();
+    if (testSlotId && testSlotId !== existingBooking.testSlot._id.toString()) {
+      newTestSlot = await TestSlot.findOne({
+        _id: testSlotId,
+        "timeSlots._id": timeSlotId,
+      }).session(session);
 
-    res.send(booking);
+      if (!newTestSlot) {
+        throw new Error("New Test Slot not found.");
+      }
+    } else {
+      newTestSlot = await TestSlot.findById(
+        existingBooking.testSlot._id
+      ).session(session);
+    }
+
+    const newTimeSlot = newTestSlot.timeSlots.id(timeSlotId);
+    if (
+      !newTimeSlot ||
+      newTimeSlot.status === "Fully Booked" ||
+      newTimeSlot.bookings.length >= newTimeSlot.capacity
+    ) {
+      throw new Error("New Time Slot is fully booked or not found.");
+    }
+
+    const newBookingDetails = {
+      childName: child.name,
+      parentName: parent.name,
+      testSlot: testSlotId || existingBooking.testSlot._id,
+      timeSlot: timeSlotId,
+    };
+
+    const newQRCodeDataURL = await QRCode.toDataURL(
+      JSON.stringify(newBookingDetails)
+    );
+
+    existingBooking.testSlot = testSlotId || existingBooking.testSlot._id;
+    existingBooking.timeSlot = oldTestSlotId;
+    existingBooking.qrCodeDataURL = Buffer.from(newQRCodeDataURL);
+
+    await existingBooking.save({ session });
+
+    newTimeSlot.bookings.push(existingBooking._id);
+    if (newTimeSlot.bookings.length >= newTimeSlot.capacity) {
+      newTimeSlot.status = "Fully Booked";
+    }
+
+    await oldTestSlot.save({ session });
+    await newTestSlot.save({ session });
+
+    await session.commitTransaction();
+    session.endSession();
+
+    res.status(200).send({ booking: existingBooking });
   } catch (error) {
-    console.log("Error updating booking:", error);
-    res.status(500).send("Error updating the booking.");
+    await session.abortTransaction();
+    session.endSession();
+    res.status(500).send(error.message || "Error updating the booking.");
   }
 });
-
-
-
-// ...
 
 router.delete("/:id", auth, async (req, res) => {
   try {
@@ -328,6 +484,12 @@ router.delete("/:id", auth, async (req, res) => {
         .send("You are not authorized to delete this booking.");
     }
 
+    // Directly pull the booking ID from the appropriate TimeSlot in TestSlot
+    await TestSlot.updateMany(
+      { "timeSlots.bookings": bookingId },
+      { $pull: { "timeSlots.$.bookings": bookingId } }
+    );
+
     res.send(booking);
   } catch (error) {
     console.log("Error deleting booking:", error);
@@ -335,8 +497,36 @@ router.delete("/:id", auth, async (req, res) => {
   }
 });
 
+router.get("/qr/:id", async function (req, res) {
+  try {
+    const bookingId = req.params.id;
+    const booking = await Booking.findById(bookingId);
 
-router.delete("/admin/delete/:id", auth, async (req, res) => {
+    if (!booking) {
+      return res.status(404).send("Booking not found.");
+    }
+
+    // Convert the Base64 string to a buffer.
+    const qrCodeBuffer = Buffer.from(
+      booking.qrCodeDataURL.buffer.toString("base64"),
+      "base64"
+    );
+
+    // Set headers to indicate you're sending an image.
+    res.writeHead(200, {
+      "Content-Type": "image/png", // or 'image/jpeg' or the appropriate image type depending on your QR code format.
+      "Content-Length": qrCodeBuffer.length,
+    });
+
+    // Send the image.
+    res.end(qrCodeBuffer);
+  } catch (error) {
+    console.log("Error fetching QR code:", error);
+    res.status(500).send("Error fetching QR code.");
+  }
+});
+
+router.delete("/admin/delete/:id", async (req, res) => {
   try {
     const bookingId = req.params.id;
     const booking = await Booking.findOneAndDelete({ _id: bookingId });
@@ -351,8 +541,5 @@ router.delete("/admin/delete/:id", auth, async (req, res) => {
     res.status(500).send("Error deleting the booking.");
   }
 });
-
-
-
 
 module.exports = router;

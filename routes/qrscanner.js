@@ -1,30 +1,42 @@
 const express = require("express");
 const router = express.Router();
 const User = require("../model/User");
+const Presentation = require("../model/Presentation");
+const moment = require("moment-timezone");
 
-
-
-router.patch("/:userId/attendedPresentation", async (req, res) => {
-    console.log(req.params, req.body);
-    const userId = req.params.userId;
-    const { attended } = req.body;
+router.patch("/validateAndUpdateAttendance", async (req, res) => {
+    const { userId } = req.body;
   
     try {
       const user = await User.findById(userId);
+  
       if (!user) {
         return res.status(404).json({ error: "User not found." });
       }
   
-      user.attendedPresentation = attended;
+      const currentTime = moment().tz("Asia/Seoul");
+  
+      const presentation = await Presentation.findOne({
+        "timeSlots.attendees._id": userId,
+        "timeSlots.startTime": { $lte: currentTime.toDate() },
+        "timeSlots.endTime": { $gte: currentTime.toDate() },
+      });
+  
+      if (!presentation) {
+        return res.status(400).json({ error: "Wrong presentation." });  // <-- Changed this line
+      }
+  
+      user.attendedPresentation = true;
       await user.save();
   
-      res.status(200).json({ message: "Attendance updated successfully." });
+      res.status(200).json({ message: "Attendance validated and updated successfully." });
     } catch (error) {
-      res
-        .status(500)
-        .json({ error: "An error occurred while updating attendance." });
+      console.error("Error during validation and update:", error);
+      res.status(500).json({
+        error: "An error occurred while validating and updating attendance.",
+      });
     }
   });
   
 
-  module.exports = router;
+module.exports = router;

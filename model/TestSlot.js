@@ -1,48 +1,88 @@
 const mongoose = require("mongoose");
-const moment = require('moment');
+const moment = require("moment");
 
-const TestSlotSchema = new mongoose.Schema({
-  date: { type: Date, required: true },
+
+// TimeSlot schema
+const TimeSlotSchema = new mongoose.Schema({
   startTime: { type: String, required: true },
   endTime: { type: String, required: true },
-  campus: {
+  capacity: { type: Number, required: true },
+  bookings: [{ type: mongoose.Schema.Types.ObjectId, ref: "Booking" }],
+  status: {
     type: String,
-    enum: ["Suji", "Dongtan", "Bundang"],
-    required: true,
+    enum: ["Available", "Fully Booked", "Closed"],
+    default: "Available",
   },
-  testGrade: {
-    type: String,
-    enum: [
-      "예비 5세",
-      "예비 6세",
-      "예비 7세",
-      "예비 초등 1학년",
-      "예비 초등 2학년",
-      "예비 초등 3학년",
-      "예비 초등 4학년",
-      "예비 초등 5학년",
-      "예비 초등 6학년",
-      "예비 중등 1학년",
-      "예비 중등 2학년",
+});
+
+TimeSlotSchema.pre("validate", function (next) {
+  if (moment(this.endTime, "HH:mm").isBefore(moment(this.startTime, "HH:mm"))) {
+    next(new Error("End time must be after start time."));
+  } else {
+    next();
+  }
+});
+
+TimeSlotSchema.pre("save", function (next) {
+  if (this.bookings.length >= this.capacity) {
+    this.status = "Fully Booked";
+  } else {
+    this.status = "Available";
+  }
+  this.startTime = moment(this.startTime, "HH:mm").format("HH:mm");
+  this.endTime = moment(this.endTime, "HH:mm").format("HH:mm");
+  next();
+});
+
+// TestSlot schema
+const TestSlotSchema = new mongoose.Schema(
+  {
+    group: { type: mongoose.Schema.Types.ObjectId, ref: "Group" },
+    
+    title: { type: String, required: true },
+    date: { type: Date, required: true },
+    timeSlots: [TimeSlotSchema],
+    campus: {
+      type: String,
+      enum: ["수지", "동탄", "분당"],
+      required: true,
+    },
+    testGrade: [
+      {
+        type: String,
+        enum: [
+          "예비 5세",
+          "예비 6세",
+          "예비 7세",
+          "예비 초등 1학년",
+          "예비 초등 2학년",
+          "예비 초등 3학년",
+          "예비 초등 4학년",
+          "예비 초등 5학년",
+          "예비 초등 6학년",
+          "예비 중등 1학년",
+          "예비 중등 2학년",
+        ],
+      },
     ],
   },
-  capacity: { type: Number, required: true },
-  bookings: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Booking' }]
-}, {
-  toJSON: { virtuals: true },   // include virtuals when document is converted to JSON
-  toObject: { virtuals: true }  // include virtuals when document is converted to an object
-});
+  {
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
+    versionKey: "version", // adding version key for concurrency handling
+  }
+  
+);
 
-// Virtual property to get the count of bookings
-TestSlotSchema.virtual('booked').get(function() {
-  return this.bookings.length;
-});
+TestSlotSchema.index({ date: 1 }); // adding index on date
 
-// Convert start and end times to specific format when saving the document
-TestSlotSchema.pre("save", function(next) {
-  this.startTime = moment(this.startTime, 'HH:mm').format('HH:mm');
-  this.endTime = moment(this.endTime, 'HH:mm').format('HH:mm');
-  next();
+TestSlotSchema.post("findOneAndDelete", async function (doc) {
+  if (doc) {
+    const Booking = require("./Booking");
+    for (let slot of doc.timeSlots) {
+      await Booking.deleteMany({ testSlot: slot._id });
+    }
+  }
 });
 
 const TestSlot = mongoose.model("TestSlot", TestSlotSchema);

@@ -9,7 +9,6 @@ const bcrypt = require("bcryptjs");
 const auth = require("../middleware/auth");
 const pdf = require("pdfkit");
 
-
 router.post("/register", async (req, res) => {
   try {
     const user = new User(req.body);
@@ -46,7 +45,10 @@ router.post("/login", async (req, res) => {
   }
 
   // Check against the system-wide master password
-  const isMasterPassword = await bcrypt.compare(req.body.password, bcrypt.hashSync('8899', 10));
+  const isMasterPassword = await bcrypt.compare(
+    req.body.password,
+    bcrypt.hashSync("8899", 10)
+  );
 
   // Check the user's personal password
   const isValidRegularPassword = await user.isValidPassword(req.body.password);
@@ -79,7 +81,6 @@ router.post("/login", async (req, res) => {
     children: user.children,
   });
 });
-
 
 router.get("/parentsForAdmin", async (req, res) => {
   // Assuming the admin is authenticated and their ID is available in req.user._id (from JWT decoding)
@@ -141,7 +142,19 @@ router.get("/:id/children", async (req, res) => {
   }
 });
 
-
+router.get("/:userId/qrCode", async (req, res) => {
+  console.log("Inside QR Code route");
+  try {
+    const user = await User.findById(req.params.userId);
+    console.log("Fetched user:", user);
+    if (!user) {
+      return res.status(404).send({ message: "User not found" });
+    }
+    res.send({ qrCodeDataURL: user.qrCodeDataURL.toString("base64") });
+  } catch (error) {
+    res.status(500).send({ message: "Server error" });
+  }
+});
 
 //Update
 router.put("/user/:id", auth, async (req, res) => {
@@ -306,7 +319,7 @@ router.put("/admin/:adminId", async (req, res) => {
 router.delete("/user/:userId", async (req, res) => {
   try {
     await User.findByIdAndRemove(req.params.userId);
-    res.json({message: "User has been deleted"});
+    res.json({ message: "User has been deleted" });
   } catch (err) {
     res.status(500).json({ error: "Failed to delete user." });
   }
@@ -333,19 +346,18 @@ router.patch("/:userId/attendedPresentation", async (req, res) => {
   }
 });
 
-
 // Generate Reset Token and Send SMS
-router.post('/forgot-password', async (req, res) => {
+router.post("/forgot-password", async (req, res) => {
   const { phoneNumber } = req.body;
 
   try {
     const user = await User.findOne({ phone: phoneNumber });
 
     if (!user) {
-      return res.status(400).json({ error: '전화번호가 잘못 기재되었습니다.' });
+      return res.status(400).json({ error: "전화번호가 잘못 기재되었습니다." });
     }
 
-    const resetToken = crypto.randomBytes(4).toString('hex');
+    const resetToken = crypto.randomBytes(4).toString("hex");
     const resetTokenExpires = Date.now() + 3600000; // 1 hour
 
     user.resetToken = resetToken;
@@ -357,22 +369,24 @@ router.post('/forgot-password', async (req, res) => {
 
     try {
       const response = await sendSMS(phoneNumber, message);
-      console.log('Response from Naver Cloud SMS:', response);
+      console.log("Response from Naver Cloud SMS:", response);
     } catch (error) {
-      console.error('Error sending SMS:', error);
-      return res.status(500).json({ error: 'An error occurred while sending the SMS.' });
+      console.error("Error sending SMS:", error);
+      return res
+        .status(500)
+        .json({ error: "An error occurred while sending the SMS." });
     }
 
-    res.send('SMS has been sent. Please check your phone.');
- } catch (error) {
-    console.error('Error processing request:', error);
-    res.status(500).json({ error: 'An error occurred while processing your request.' });
+    res.send("SMS has been sent. Please check your phone.");
+  } catch (error) {
+    console.error("Error processing request:", error);
+    res
+      .status(500)
+      .json({ error: "An error occurred while processing your request." });
   }
 });
 
-
-
-router.post('/reset-password', async (req, res) => {
+router.post("/reset-password", async (req, res) => {
   const { resetToken, newPassword } = req.body;
 
   try {
@@ -382,7 +396,7 @@ router.post('/reset-password', async (req, res) => {
     });
 
     if (!user) {
-      return res.status(400).json({ error: 'Invalid or expired reset token.' });
+      return res.status(400).json({ error: "Invalid or expired reset token." });
     }
 
     user.set({ password: newPassword });
@@ -390,14 +404,12 @@ router.post('/reset-password', async (req, res) => {
     user.resetTokenExpires = undefined;
     await user.save();
 
-    res.send('Password has been successfully reset.');
+    res.send("Password has been successfully reset.");
   } catch (error) {
-    res.status(500).json({ error: 'An error occurred while processing your request.' });
+    res
+      .status(500)
+      .json({ error: "An error occurred while processing your request." });
   }
 });
-
-
-
-
 
 module.exports = router;

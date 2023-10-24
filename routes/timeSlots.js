@@ -1,57 +1,138 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const TestSlot = require('../model/TestSlot');
-const auth = require('../middleware/auth'); // Assuming you have an auth middleware for protected routes
-const requireAdmin = require('../middleware/requireAdmin'); // Assuming you have a middleware to ensure only admins can modify test slots
+const TestSlot = require("../model/TestSlot");
+const Group = require("../model/Group")
+const auth = require("../middleware/auth");
+const requireAdmin = require("../middleware/requireAdmin");
+const Joi = require("joi");
+const mongoose = require("mongoose");
 
-router.post('/', auth,  async (req, res) => {
-  console.log('Received request body:', req.body);
+
+router.post("/", async (req, res) => {
+  console.log("Received request body:", req.body);
+
+  // Input Validation using Joi for timeSlotSchema
+  const timeSlotSchema = Joi.object({
+    startTime: Joi.string()
+      .pattern(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/)
+      .required(),
+    endTime: Joi.string()
+      .pattern(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/)
+      .required(),
+    capacity: Joi.number().integer().min(1).required(),
+  });
+
+  // Main schema with added group validation
+  const schema = Joi.object({
+    group: Joi.string().custom((value, helpers) => {
+      if (!mongoose.Types.ObjectId.isValid(value)) {
+        return helpers.message('Invalid Group ID');
+      }
+      return value;
+    }).required(),
+    title: Joi.string().required(),
+    date: Joi.date().required(),
+    timeSlots: Joi.array().items(timeSlotSchema).required(),
+    campus: Joi.string().valid("수지", "동탄", "분당").required(),
+    testGrade: Joi.array()
+      .items(
+        Joi.string().valid(
+          "예비 5세",
+          "예비 6세",
+          "예비 7세",
+          "예비 초등 1학년",
+          "예비 초등 2학년",
+          "예비 초등 3학년",
+          "예비 초등 4학년",
+          "예비 초등 5학년",
+          "예비 초등 6학년",
+          "예비 중등 1학년",
+          "예비 중등 2학년"
+        )
+      )
+      .required(),
+  });
+
+  const { error } = schema.validate(req.body);
+  if (error) {
+    console.error("Validation error:", error.details[0].message);
+    return res.status(400).send(error.details[0].message);
+  }
+
   const testSlot = new TestSlot(req.body);
   try {
     await testSlot.save();
+    console.log("TestSlot saved successfully:", testSlot);
     res.status(201).send(testSlot);
   } catch (error) {
-    res.status(400).json({ error: 'Invalid request data.' });
+    console.error("Error saving TestSlot:", error);
+    res.status(400).json({ error: "Invalid request data." });
   }
 });
 
-router.get('/', async (req, res) => {
+const { isValidObjectId } = require('mongoose');
+
+router.get("/", async (req, res) => {
   try {
-    let testSlots = await TestSlot.find({
-      date: { $gte: new Date() }, // Only return future test slots
-      // the $expr line is not needed for this version since you'll compute available slots on the frontend
+    const {
+      group, // Assume groupId is passed as a query parameter
+    } = req.query;
+
+    // Validate groupId
+    if (!isValidObjectId(group)) {
+      return res.status(400).send("Invalid group ID");
+    }
+
+    // Check if the group can book and if current date is within the startDate and endDate
+    const groupData = await Group.findById(group);
+    const currentDate = new Date();
+    if (!groupData 
+        || !groupData.canBook 
+        || currentDate < new Date(groupData.startDate) 
+        || currentDate > new Date(groupData.endDate)) {
+      return res.status(403).send("This group cannot book at the moment or is out of the booking period.");
+    }
+
+    // Query based on the child's groupId
+    const query = { group };
+
+    const testSlots = await TestSlot.find(query)
+      .select("date timeSlots campus title testGrade group")
+      .populate('timeSlots.bookings', '_id')
+      .sort({ date: 1 })
+      .lean();
+
+    const formattedSlots = testSlots.map((testSlot) => {
+      testSlot.timeSlots = testSlot.timeSlots.map((slot) => {
+        slot.availableSlots = slot.capacity - slot.bookings.length;
+        return slot;
+      });
+      testSlot.testSlotId = testSlot._id;
+      return testSlot;
     });
 
-    // Assuming bookings is an array on each test slot document, calculate available slots for each test slot
-    testSlots = testSlots.map(slot => {
-      slot = slot.toObject(); // Convert the document to a plain JS object
-      slot.availableSlots = slot.capacity - slot.bookings.length;
-      return slot;
-    });
-
-    res.send(testSlots);
+    res.send(formattedSlots);
   } catch (error) {
     console.error("Error fetching test slots:", error);
-    res.status(500).send();
+    res.status(500).send("Internal Server Error");
   }
 });
 
-
-router.get('/admin', async (req, res) => {
+router.get("/admin", async (req, res) => {
   try {
-    const testSlots = await TestSlot.find({
+    const testSlots = await TestSlot.find({});
+    console.log(testSlots);
 
-    });
     res.send(testSlots);
   } catch (error) {
-    res.status(500).send();
+    console.error("Error fetching test slots for admin:", error);
+    res.status(500).send("Internal Server Error");
   }
 });
 
-// GET route to retrieve a test slot by id
-router.get('/:id', async (req, res) => {
+router.get("/:id", async (req, res) => {
   if (!req.params.id) {
-    return res.status(400).json({ error: 'Invalid TestSlot ID.' });
+    return res.status(400).json({ error: "Invalid TestSlot ID." });
   }
   try {
     const testSlot = await TestSlot.findById(req.params.id);
@@ -60,28 +141,62 @@ router.get('/:id', async (req, res) => {
     }
     res.send(testSlot);
   } catch (error) {
-    res.status(500).send();
+    console.error("Error fetching test slot by ID:", error);
+    res.status(500).send("Internal Server Error");
   }
 });
 
-// PATCH route to update a test slot
-router.patch('/:id', async (req, res) => {
+router.patch("/:id", async (req, res) => {
   const updates = Object.keys(req.body);
   try {
     const testSlot = await TestSlot.findById(req.params.id);
     if (!testSlot) {
       return res.status(404).send();
     }
-    updates.forEach((update) => testSlot[update] = req.body[update]);
+    updates.forEach((update) => (testSlot[update] = req.body[update]));
     await testSlot.save();
     res.send(testSlot);
   } catch (error) {
-    res.status(400).send(error);
+    console.error("Error updating test slot:", error);
+    res.status(400).send("Invalid Update Data");
   }
 });
 
-// DELETE route to delete a test slot
-router.delete('/:id', async (req, res) => {
+
+//Change Test
+
+
+//Edit a single timeSlot
+router.patch("/:testSlotId/timeSlots/:timeSlotId", async (req, res) => {
+  const { testSlotId, timeSlotId } = req.params;
+  const updates = req.body;
+
+  try {
+    const testSlot = await TestSlot.findOne({
+      "_id": testSlotId,
+      "timeSlots._id": timeSlotId
+    });
+    
+    if (!testSlot) {
+      return res.status(404).send();
+    }
+
+    const timeSlot = testSlot.timeSlots.id(timeSlotId);
+    Object.keys(updates).forEach((key) => {
+      timeSlot[key] = updates[key];
+    });
+
+    await testSlot.save();
+
+    res.send(timeSlot);
+  } catch (error) {
+    console.error("Error updating time slot:", error);
+    res.status(400).send("Invalid Update Data");
+  }
+});
+
+
+router.delete("/:id", async (req, res) => {
   try {
     const testSlot = await TestSlot.findByIdAndDelete(req.params.id);
     if (!testSlot) {
@@ -89,7 +204,8 @@ router.delete('/:id', async (req, res) => {
     }
     res.send(testSlot);
   } catch (error) {
-    res.status(500).send();
+    console.error("Error deleting test slot:", error);
+    res.status(500).send("Internal Server Error");
   }
 });
 

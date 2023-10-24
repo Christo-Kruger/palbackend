@@ -2,17 +2,19 @@ const jwt = require("jsonwebtoken");
 
 module.exports = function (req, res, next) {
   const bearerHeader = req.header("authorization");
+ // Debugging line
+  
   if (!bearerHeader)
     return res.status(401).send("Access denied. No token provided.");
 
   const token = bearerHeader.split(" ")[1]; // Get the token part after "Bearer"
-  console.log("Extracted token:", token);
+  console.log("Extracted token:", token); // Debugging line
+  
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     req.user = decoded;
 
     next();
-    // ... the try block
   } catch (exception) {
     console.error(exception); // Log the error for more details
     if (exception instanceof jwt.TokenExpiredError) {
@@ -24,3 +26,4 @@ module.exports = function (req, res, next) {
     }
   }
 };
+

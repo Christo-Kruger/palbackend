@@ -1,11 +1,15 @@
-
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
 
 const CampusSchema = new mongoose.Schema({
-    name: { type: String, required: true },
-    admins: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Admin' }],
-    bookings: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Booking' }],
+  name: { type: String, enum: ['수지', '동탄', '분당'], required: true },
+  admins: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+  parents: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+  bookings: [{ type: mongoose.Schema.Types.ObjectId, ref: "Booking" }],
+  canBook: {
+    type: Boolean,
+    default: false,
+  },
 });
 
-const Campus = mongoose.model('Campus', CampusSchema);
+const Campus = mongoose.model("Campus", CampusSchema);
 module.exports = Campus;
