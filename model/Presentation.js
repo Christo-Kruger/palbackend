@@ -10,6 +10,8 @@ const TimeSlotSchema = new mongoose.Schema({
     {
       _id: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
       bookedAt: { type: Date },
+      attended:{type: Boolean, default: false},
+      qrCodeDataURL: { type: Buffer }
     },
   ],
 });

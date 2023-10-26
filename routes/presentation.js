@@ -73,24 +73,37 @@ router.get("/myBookings", auth, async (req, res) => {
       "timeSlots.attendees._id": req.user._id,
     });
     console.log("All Presentations:", presentations);
+
     const myBookings = presentations.map((presentation) => {
       const myTimeSlot = presentation.timeSlots.find((timeSlot) =>
         timeSlot.attendees.some(
           (attendee) => attendee._id.toString() === req.user._id.toString()
         )
       );
+
+      const myAttendee = myTimeSlot.attendees.find(
+        (attendee) => attendee._id.toString() === req.user._id.toString()
+      );
+
+      const qrCodeBase64 = myAttendee.qrCodeDataURL ? myAttendee.qrCodeDataURL.toString("base64") : null;
+
       return {
         ...presentation.toObject(),
         timeSlots: [myTimeSlot],
+        myQrCode: qrCodeBase64,
+        myAttendanceStatus: myAttendee.attended,  // Added this line
       };
     });
+
     console.log("My Bookings:", myBookings);
     res.json(myBookings);
+
   } catch (err) {
     console.error(err);
     res.status(500).send("Server Error");
   }
 });
+
 
 router.get("/exportToExcel", auth, async (req, res) => {
   try {

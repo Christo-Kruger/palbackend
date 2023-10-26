@@ -193,6 +193,24 @@ router.patch('/canBook/:id', async (req, res) => {
   }
 });
 
+//Get Children in Group
+router.get('/group/:groupId/children', async (req, res) => {
+  try {
+    const groupId = req.params.groupId;
+
+    // Find the group by its ID and populate its children
+    const group = await Group.findById(groupId).populate('children');
+
+    if (!group) {
+      return res.status(404).json({ message: 'Group not found' });
+    }
+
+    // Send the populated children array as the response
+    res.json(group.children);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
 
 router.delete('/:id', async (req, res) => {
   try {

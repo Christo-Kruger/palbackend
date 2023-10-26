@@ -38,7 +38,6 @@ TimeSlotSchema.pre("save", function (next) {
 const TestSlotSchema = new mongoose.Schema(
   {
     group: { type: mongoose.Schema.Types.ObjectId, ref: "Group" },
-    
     title: { type: String, required: true },
     date: { type: Date, required: true },
     timeSlots: [TimeSlotSchema],

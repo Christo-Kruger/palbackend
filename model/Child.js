@@ -30,6 +30,7 @@ const ChildSchema = new mongoose.Schema({
   },
   parent: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
   updatedAt: { type: Date },
+  hadBooked:{type: Boolean, default: false }
 });
 
 const ageGradeMapping = {

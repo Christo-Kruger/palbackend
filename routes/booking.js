@@ -191,15 +191,23 @@ router.get("/", async (req, res) => {
           path: "timeSlots",
         },
       })
-      .populate("child")
+      .populate({
+        path: "child",
+        populate: {
+          path: "group", // Populate the group object
+        },
+      })
       .populate("parent");
 
     // Filtering the timeSlots based on the booking
     bookings = bookings.map((booking) => {
       if (booking.testSlot && booking.testSlot.timeSlots) {
-        booking.testSlot.timeSlots = booking.testSlot.timeSlots.filter(
-          (timeSlot) => timeSlot.bookings.includes(booking._id)
+        const matchedTimeSlot = booking.testSlot.timeSlots.find(
+          (timeSlot) => timeSlot.bookings.includes(booking._id.toString())
         );
+
+        // Assign the matched time slot
+        booking.testSlot.timeSlots = matchedTimeSlot ? [matchedTimeSlot] : [];
       }
       return booking;
     });
@@ -209,6 +217,9 @@ router.get("/", async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 });
+
+
+
 
 router.get("/parent", auth, async (req, res) => {
   try {
