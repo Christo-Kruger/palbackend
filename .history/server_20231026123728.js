@@ -12,7 +12,6 @@ var allowedOrigins = [
   "http://localhost:3000",
   "http://localhost:3001",
   "https://jleetest.vercel.app/",
-  "https://jleetest.vercel.app",
   "https://jlee-reserve.vercel.app",
   "https://jlee-christo-kruger.vercel.app",
   "https://jlee-christo-kruger.vercel.app",
