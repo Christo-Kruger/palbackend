@@ -218,6 +218,9 @@ router.get("/", async (req, res) => {
   }
 });
 
+
+
+
 router.get("/parent", auth, async (req, res) => {
   try {
     const userId = req.query.userId;
@@ -233,7 +236,7 @@ router.get("/parent", auth, async (req, res) => {
       return res.json([]); // Return an empty array if no bookings are found
     }
 
-    // Post-process to include only the relevant timeSlots
+    // Post-process to include only the relevant timeSlots and convert Buffer to base64
     const processedBookings = bookings.map((booking) => {
       let relevantTimeSlot = null;
 
@@ -247,24 +250,16 @@ router.get("/parent", auth, async (req, res) => {
         );
       }
 
-      return {
-        ...booking._doc,
-        testSlot: {
-          ...booking.testSlot?._doc,
-          timeSlots: relevantTimeSlot ? [relevantTimeSlot] : [],
-        },
-        // Removed qrCodeDataURL as it's not needed
-      };
-    });
+    
 
-    // Log the processed bookings to the console
+  
+
 
     res.json(processedBookings);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
-
 
 // Get Booking Count
 

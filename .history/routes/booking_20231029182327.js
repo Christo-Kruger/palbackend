@@ -218,7 +218,10 @@ router.get("/", async (req, res) => {
   }
 });
 
-router.get("/parent", auth, async (req, res) => {
+
+
+
+outer.get("/parent", auth, async (req, res) => {
   try {
     const userId = req.query.userId;
     if (userId !== req.user._id.toString()) {
