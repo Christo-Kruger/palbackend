@@ -29,7 +29,7 @@ router.post('/create', async (req, res) => {
 // Get all campuses
 router.get('/', async (req, res) => {
     try {
-        const campuses = await Campus.find().select('name canBook ageGroups'); // fetch only 'name' and 'ageGroups'
+        const campuses = await Campus.find().select('name ageGroups'); // fetch only 'name' and 'ageGroups'
         res.status(200).send(campuses);
     } catch (err) {
         console.error("Error:", err);
@@ -102,31 +102,7 @@ router.patch('/canbook/:id', async (req, res) => {
 
 //Patch ageGroup can Book
 
-router.patch('/agegroup/:id', async (req, res) => {
-    try {
-        const { id } = req.params;
-        const { ageGroup, canBook } = req.body;
 
-        const campus = await Campus.findById(id);
-        if (!campus) {
-            return res.status(404).send("Campus not found");
-        }
-
-        const ageGroupIndex = campus.ageGroups.findIndex((ag) => ag.ageGroup === ageGroup);
-        if (ageGroupIndex === -1) {
-            return res.status(404).send("Age group not found");
-        }
-
-        campus.ageGroups[ageGroupIndex].canBook = canBook;
-        await campus.save();
-
-        res.status(200).json(campus);
-    } catch (error) {
-        console.error(error);
-        res.status(500).send("Error updating ageGroup canBook");
-    }
-}
-);
 
 
 // Delete a campus

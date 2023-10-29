@@ -627,7 +627,7 @@ router.patch("/:id/slots/:slotId/attendees", auth, async (req, res) => {
 
   try {
     const presentation = await Presentation.findById(req.params.id);
-    const timeSlot = presentation.timeSlots.id(req.params.slotId);
+    const timeSlot = 
     const userIdString = req.user._id.toString();
     const user = await User.findById(req.user._id).populate("children");
     const userCampus = user.campus;

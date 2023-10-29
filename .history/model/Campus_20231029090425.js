@@ -1,10 +1,13 @@
 const mongoose = require("mongoose");
 
+
+
 const AgeGroupSchema = new mongoose.Schema({
   ageGroup: { type: String },
   canBook: { type: Boolean },
 });
 
+module.exports = mongoose.model("canBook", CanBookSchema);
 
 const CampusSchema = new mongoose.Schema({
   name: { type: String, enum: ['수지', '동탄', '분당'], required: true },
@@ -15,7 +18,7 @@ const CampusSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
-  ageGroups: [AgeGroupSchema],
+  ageGroups: [AgeGroups],
 });
 
 const Campus = mongoose.model("Campus", CampusSchema);

@@ -9,7 +9,7 @@ const validTestGrades = [
   "예비 초등 1학년",
   "예비 초등 2학년",
   "예비 초등 3학년",
-  "예비 초등 4학년",
+  "예비 초등 4학년", 
   "예비 초등 5학년",
   "예비 초등 6학년",
   "예비 중등 1학년",
@@ -20,6 +20,7 @@ const validateTestGrade = (testGrade) => {
   return validTestGrades.includes(testGrade);
 };
 
+// Get age group's 'canBook' property that matches child's testGrade within a specific campus
 router.get("/:campusName/:testGrade", async (req, res) => {
   const { campusName, testGrade } = req.params;
 
@@ -29,16 +30,17 @@ router.get("/:campusName/:testGrade", async (req, res) => {
 
   try {
     const campus = await Campus.findOne({ name: campusName });
-    if (!campus || !campus.canBook) {
-      return res.status(404).json({ message: "Booking not allowed for this campus." });
+    if (!campus) {
+      return res.status(404).json({ message: "Campus not found." });
     }
 
     const ageGroup = campus.ageGroups.find((ag) => ag.ageGroup === testGrade);
-
-    if (ageGroup && ageGroup.canBook) {
-      return res.status(200).json({ canBook: true });
+    if (ageGroup) {
+      return res.status(200).json({ canBook: ageGroup.canBook });
     } else {
-      return res.status(404).json({ canBook: false, message: "Booking not allowed for this age group within the campus." });
+      return res.status(404).json({
+        message: "No record found for this test grade within the campus.",
+      });
     }
   } catch (error) {
     console.error("Database error:", error);
@@ -47,4 +49,3 @@ router.get("/:campusName/:testGrade", async (req, res) => {
 });
 
 module.exports = router;
-

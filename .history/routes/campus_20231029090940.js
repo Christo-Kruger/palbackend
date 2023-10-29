@@ -29,7 +29,7 @@ router.post('/create', async (req, res) => {
 // Get all campuses
 router.get('/', async (req, res) => {
     try {
-        const campuses = await Campus.find().select('name canBook ageGroups'); // fetch only 'name' and 'ageGroups'
+        const campuses = await Campus.find().select('name ageGroups'); // fetch only 'name' and 'ageGroups'
         res.status(200).send(campuses);
     } catch (err) {
         console.error("Error:", err);
@@ -56,19 +56,13 @@ router.get('/:campusId', async (req, res) => {
 // Edit a campus
 router.patch('/:campusId', async (req, res) => {
     const { campusId } = req.params;
-    const { name, ageGroups, canBook } = req.body; // added ageGroups and canBook
+    const { name } = req.body;
     try {
-        const campus = await Campus.findById(campusId).select('name ageGroups canBook'); // fetch only 'name', 'ageGroups', and 'canBook'
-
+        const campus = await Campus.findById(campusId);
         if (!campus) {
             return res.status(404).send("Campus not found");
         }
-
-        // Update the fields if they are provided
-        if (name) campus.name = name;
-        if (ageGroups) campus.ageGroups = ageGroups;
-        if (canBook !== undefined) campus.canBook = canBook; // checking against undefined because canBook can be false
-
+        campus.name = name;
         await campus.save();
         res.status(200).json(campus);
     } catch (error) {
@@ -76,7 +70,6 @@ router.patch('/:campusId', async (req, res) => {
         res.status(500).send("Error updating campus");
     }
 });
-
 
 // PATCH campus canBook 
 router.patch('/canbook/:id', async (req, res) => {
@@ -99,35 +92,6 @@ router.patch('/canbook/:id', async (req, res) => {
     }
 }
 );
-
-//Patch ageGroup can Book
-
-router.patch('/agegroup/:id', async (req, res) => {
-    try {
-        const { id } = req.params;
-        const { ageGroup, canBook } = req.body;
-
-        const campus = await Campus.findById(id);
-        if (!campus) {
-            return res.status(404).send("Campus not found");
-        }
-
-        const ageGroupIndex = campus.ageGroups.findIndex((ag) => ag.ageGroup === ageGroup);
-        if (ageGroupIndex === -1) {
-            return res.status(404).send("Age group not found");
-        }
-
-        campus.ageGroups[ageGroupIndex].canBook = canBook;
-        await campus.save();
-
-        res.status(200).json(campus);
-    } catch (error) {
-        console.error(error);
-        res.status(500).send("Error updating ageGroup canBook");
-    }
-}
-);
-
 
 // Delete a campus
 router.delete('/:campusId', async (req, res) => {

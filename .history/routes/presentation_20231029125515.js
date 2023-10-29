@@ -69,7 +69,6 @@ router.get("/", async (req, res) => {
       campus: presentation.campus,
       ageGroup: presentation.ageGroup,
       timeSlots: presentation.timeSlots.map((timeSlot) => ({
-        slotId: timeSlot._id,
         startTime: timeSlot.startTime,
         endTime: timeSlot.endTime,
         maxAttendees: timeSlot.maxAttendees,
@@ -342,6 +341,8 @@ router.get("/allAttendeesInTimeSlots", auth, async (req, res) => {
               presentationName: presentation.name,
               startTime: slot.startTime,
               endTime: slot.endTime,
+              slotId: slot._id,
+          
             };
           });
         });

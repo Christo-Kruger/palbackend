@@ -29,7 +29,7 @@ router.post('/create', async (req, res) => {
 // Get all campuses
 router.get('/', async (req, res) => {
     try {
-        const campuses = await Campus.find().select('name canBook ageGroups'); // fetch only 'name' and 'ageGroups'
+        const campuses = await Campus.find().select('name canB ageGroups'); // fetch only 'name' and 'ageGroups'
         res.status(200).send(campuses);
     } catch (err) {
         console.error("Error:", err);

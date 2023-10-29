@@ -1,5 +1,7 @@
 const mongoose = require("mongoose");
 
+
+
 const AgeGroupSchema = new mongoose.Schema({
   ageGroup: { type: String },
   canBook: { type: Boolean },
@@ -15,7 +17,7 @@ const CampusSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
-  ageGroups: [AgeGroupSchema],
+  ageGroups: [AgeGroupS],
 });
 
 const Campus = mongoose.model("Campus", CampusSchema);
