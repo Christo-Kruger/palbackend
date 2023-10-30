@@ -88,7 +88,6 @@ router.get("/", async (req, res) => {
 
 router.get("/myBookings", auth, async (req, res) => {
   try {
-    console.log("User ID:", req.user._id);
     const presentations = await Presentation.find({
       "timeSlots.attendees._id": req.user._id,
     });
@@ -105,26 +104,24 @@ router.get("/myBookings", auth, async (req, res) => {
         (attendee) => attendee._id.toString() === req.user._id.toString()
       );
 
-      const qrCodeBase64 = myAttendee.qrCodeDataURL
-        ? myAttendee.qrCodeDataURL.toString("base64")
-        : null;
-
       return {
         ...presentation.toObject(),
-        timeSlots: [myTimeSlot],
-        myQrCode: qrCodeBase64,
-        myAttendanceStatus: myAttendee.attended, // Added this line
+        timeSlots: [
+          {
+            ...myTimeSlot.toObject(),
+            attendees: [myAttendee], // Updated this line to include only the authenticated user's information
+          },
+        ],
+        myAttendanceStatus: myAttendee.attended,
       };
     });
 
-    console.log("My Bookings:", myBookings);
     res.json(myBookings);
   } catch (err) {
     console.error(err);
     res.status(500).send("Server Error");
   }
 });
-
 router.get("/exportToExcel", auth, async (req, res) => {
   try {
     const populationOptions = {
@@ -349,7 +346,10 @@ router.get("/allAttendeesInTimeSlots", auth, async (req, res) => {
     });
 
     // Apply Pagination here
-    const paginatedAttendeesInTimeSlots = allAttendeesInTimeSlots.slice(skip, skip + limit);
+    const paginatedAttendeesInTimeSlots = allAttendeesInTimeSlots.slice(
+      skip,
+      skip + limit
+    );
 
     res.json({ data: paginatedAttendeesInTimeSlots, page: page, limit: limit });
   } catch (err) {
@@ -626,10 +626,14 @@ router.patch("/:id/slots/:slotId/attendees", auth, async (req, res) => {
   session.startTransaction();
 
   try {
-    const presentation = await Presentation.findById(req.params.id);
+    // Parallelize the database reads for Presentation and User models
+    const [presentation, user] = await Promise.all([
+      Presentation.findById(req.params.id),
+      User.findById(req.user._id).populate("children"),
+    ]);
+
     const timeSlot = presentation.timeSlots.id(req.params.slotId);
     const userIdString = req.user._id.toString();
-    const user = await User.findById(req.user._id).populate("children");
     const userCampus = user.campus;
 
     // Check if the user's campus allows them to book the presentation
@@ -646,35 +650,25 @@ router.patch("/:id/slots/:slotId/attendees", auth, async (req, res) => {
 
     if (!childrenInAgeGroup.length) {
       return res.status(400).json({
-        message:
-          "해당 연령의 학생이 확인되지 않습니다. [등록학생정보]에서 생년월일을 확인해주시기 바랍니다.",
+        message: "해당 연령의 학생이 확인되지 않습니다. [등록학생정보]에서 생년월일을 확인해주시기 바랍니다.",
       });
     }
 
-    const childrenNames = childrenInAgeGroup
-      .map((child) => child.name)
-      .join(", ");
-    const childrenTestGrades = childrenInAgeGroup
-      .map((child) => child.testGrade)
-      .join(", ");
+    const childrenNames = childrenInAgeGroup.map((child) => child.name).join(", ");
+    const childrenTestGrades = childrenInAgeGroup.map((child) => child.testGrade).join(", ");
 
     // Check if the user has already booked a presentation in the same age group
-    const allPresentations = await Presentation.find({
-      ageGroup: presentation.ageGroup,
-    });
+    const allPresentations = await Presentation.find({ ageGroup: presentation.ageGroup });
 
     const isBookedInSameAgeGroup = allPresentations.some((presentation) =>
       presentation.timeSlots.some((timeSlot) =>
-        timeSlot.attendees
-          .map((attendee) => attendee._id.toString())
-          .includes(userIdString)
+        timeSlot.attendees.map((attendee) => attendee._id.toString()).includes(userIdString)
       )
     );
 
     if (isBookedInSameAgeGroup) {
       return res.status(400).json({
-        message:
-          "이 연령대의 프레젠테이션을 이미 예약하셨습니다. 다시 예약하실 수 없습니다.",
+        message: "이 연령대의 프레젠테이션을 이미 예약하셨습니다. 다시 예약하실 수 없습니다.",
       });
     }
 
@@ -690,45 +684,22 @@ router.patch("/:id/slots/:slotId/attendees", auth, async (req, res) => {
     timeSlot.availableSlots -= 1;
     await presentation.save({ session });
 
-    // Update the user's QR code
-    const attendeeName = user.name;
-    const attendeePhone = user.phone;
-    const timeSlotStartTime = timeSlot.startTime;
-    const userID = user._id;
-
-    const qrCodeData = `${attendeeName},${attendeePhone},${timeSlotStartTime}, ${userID}`;
-    const qrCodeDataURL = await QRCode.toDataURL(qrCodeData);
-    const qrCodeBinaryData = Buffer.from(qrCodeDataURL.split(",")[1], "base64");
-
-    user.qrCodeDataURL = qrCodeBinaryData;
-    await user.save({ session });
-
     const startTimeKST = moment
-      .tz(timeSlot.startTime, "HH:mm", "Asia/Seoul")
-      .format("HH:mm");
+    .tz(timeSlot.startTime, "HH:mm", "Asia/Seoul")
+    .format("HH:mm");
 
     // Send the booking confirmation SMS
-    const message = `안녕하세요.제이리어학원입니다.
-${childrenNames} 학부모님
-예약하신 설명회 일정 확인 부탁드립니다.
-[${presentation.name}]
-■ 날짜: ${new Date(presentation.date).toLocaleDateString("ko-KR", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    })}
-■ 시간: ${startTimeKST}
-
-■ 장소: ${presentation.location}
-  
-■ 참석가능인원: 1명 (참석 인원이 제한되어 학부모 1명만 입장이 가능합니다.★유아 동반 불가★)
-
-추가적인 문의사항이 있으실 경우 각 캠퍼스로 연락해주시기 바랍니다.
--분당:031-713-9405
--수지:031-526-9777
--동탄:031-373-1633
-
-감사합니다.`;
+    const message = `안녕하세요. 제이리어학원입니다.
+      ${childrenNames} 학부모님
+      예약하신 설명회 일정 확인 부탁드립니다.
+      [${presentation.name}]
+      ■ 날짜: ${new Date(presentation.date).toLocaleDateString("ko-KR", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      })}
+      ■ 시간: ${startTimeKST}
+      ■ 장소: ${presentation.location}`;
 
     await smsService.sendSMS(user.phone, message);
 
@@ -737,13 +708,13 @@ ${childrenNames} 학부모님
     session.endSession();
     res.json(timeSlot);
   } catch (err) {
-    // Corrected here
     // Abort the transaction and end the session
     await session.abortTransaction();
     session.endSession();
     res.status(400).json({ message: err.message });
   }
 });
+
 
 // Replace attendees list
 router.put("/:id/attendees", getPresentation, async (req, res) => {

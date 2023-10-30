@@ -1,4 +1,8 @@
 # .gitignore
+# Scripts
+scripts/
+# history
+.history/
 
 # Ignore node_modules
 node_modules/
